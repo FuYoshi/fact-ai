@@ -5,9 +5,9 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
 dependencies = [
-    # SocialJax compatible versions
-    "jax==0.4.23",
-    "jaxlib==0.4.23",
+    # Updated JAX versions for cuDNN 9.x and CUDA 12.6 support
+    "jax>=0.4.30",
+    "jaxlib>=0.4.30",
     "chex==0.1.84",
     "distrax==0.1.5",
     "flax==0.7.4",
