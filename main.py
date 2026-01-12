@@ -119,6 +119,9 @@ def main():
                 cfg['SEED'] = args.seed
             if args.tune:
                 cfg['TUNE'] = True
+            # Override WANDB_MODE from environment variable if set
+            if 'WANDB_MODE' in os.environ:
+                cfg['WANDB_MODE'] = os.environ['WANDB_MODE']
             
             # Run the IPPO training
             if cfg.get('TUNE', False):
