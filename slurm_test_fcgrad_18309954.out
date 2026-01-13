@@ -1,0 +1,44 @@
+==============================================
+  Job: FCGrad Quick Test
+  Config: test_fcgrad (100k steps)
+  Start: Tue Jan 13 23:55:26 CET 2026
+==============================================
+
+GPU Info:
+name, memory.total [MiB]
+NVIDIA A100-SXM4-40GB, 40960 MiB
+NVIDIA A100-SXM4-40GB, 40960 MiB
+NVIDIA A100-SXM4-40GB, 40960 MiB
+NVIDIA A100-SXM4-40GB, 40960 MiB
+
+Running FCGrad test...
+Running IPPO: ippo_cnn_coins
+Config: test_fcgrad
+Working directory: /gpfs/home1/scur0012/simon/fact_fcgrad
+
+============================================================
+FCGrad ENABLED - Fair Conflict-aware Gradient Adjustment
+============================================================
+
+🚀 Starting training: 250 updates, 100,000 timesteps
+   JIT compiling... (this may take a while with 2 minibatches)
+
+Training:   0%|          | 0/250 [00:00<?, ?update/s]📈 TensorBoard logs: ./runs/fcgrad_cnn_coin_game_seed99_20260113_235544
+input_obs_shape (4, 11, 11, 14)
+input_obs_shape (4, 11, 11, 14)
+Error running IPPO: Abstract tracer value encountered where concrete value is expected: traced array with shape int32[].
+in jax.numpy.split argument 1
+The error occurred while tracing the function scan_fn at /gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO/ippo_cnn_coins.py:760 for scan. This value became a tracer due to JAX operations on these lines:
+
+  operation a:i32[19] = convert_element_type[new_dtype=int32 weak_type=False] b
+    from line /gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO/fcgrad_utils.py:33:51 (unflatten_grads)
+
+See https://jax.readthedocs.io/en/latest/errors.html#jax.errors.ConcretizationTypeError
+[1;34mwandb[0m: 
+[1;34mwandb[0m: You can sync this run to the cloud by running:
+[1;34mwandb[0m: [1mwandb sync /gpfs/home1/scur0012/simon/fact_fcgrad/wandb/offline-run-20260113_235543-ctp9mdfn[0m
+[1;34mwandb[0m: Find logs at: [1;35m../../../../gpfs/home1/scur0012/simon/fact_fcgrad/wandb/offline-run-20260113_235543-ctp9mdfn/logs[0m
+Training:   0%|          | 0/250 [00:05<?, ?update/s]
+==============================================
+  Job Complete: Tue Jan 13 23:55:50 CET 2026
+==============================================

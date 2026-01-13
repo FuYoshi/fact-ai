@@ -1,0 +1,51 @@
+wandb: Tracking run with wandb version 0.23.1
+wandb: W&B syncing is set to `offline` in this directory. Run `wandb online` or set WANDB_MODE=online to enable cloud syncing.
+wandb: Run data is saved locally in /gpfs/home1/scur0012/simon/fact_fcgrad/wandb/offline-run-20260113_235543-ctp9mdfn
+/home/scur0012/.venvs/fcgrad/lib/python3.12/site-packages/jax/_src/ops/scatter.py:96: FutureWarning: scatter inputs have incompatible types: cannot safely cast value from dtype=int32 to dtype=int16 with jax_numpy_dtype_promotion='standard'. In future JAX releases this will result in an error.
+  warnings.warn(
+Traceback (most recent call last):
+  File "/gpfs/home1/scur0012/simon/fact_fcgrad/main.py", line 143, in main
+    script_module.single_run(cfg)
+  File "/gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO/ippo_cnn_coins.py", line 962, in single_run
+    out = jax.vmap(train_jit)(rngs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO/ippo_cnn_coins.py", line 901, in train
+    runner_state, metric = jax.lax.scan(
+                           ^^^^^^^^^^^^^
+  File "/gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO/ippo_cnn_coins.py", line 791, in _update_step
+    update_state, loss_info = jax.lax.scan(
+                              ^^^^^^^^^^^^^
+  File "/gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO/ippo_cnn_coins.py", line 792, in <lambda>
+    lambda state, unused: _update_epoch(state, unused, i, advantages_col, targets_col), update_state, None, config["UPDATE_EPOCHS"]
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO/ippo_cnn_coins.py", line 766, in _update_epoch
+    train_state, total_loss = jax.lax.scan(scan_fn, train_state, scan_inputs)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO/ippo_cnn_coins.py", line 762, in scan_fn
+    return _update_minbatch(state, batch_info, network[i], coll_adv, coll_tgt)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO/ippo_cnn_coins.py", line 681, in _update_minbatch
+    grads = fcgrad_adjust(
+            ^^^^^^^^^^^^^^
+  File "/gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO/fcgrad_utils.py", line 127, in fcgrad_adjust
+    return unflatten_grads(adjusted_flat, grad_individual)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO/fcgrad_utils.py", line 33, in unflatten_grads
+    split_grads = jnp.split(flat_grads, jnp.cumsum(jnp.array(sizes[:-1])))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/scur0012/.venvs/fcgrad/lib/python3.12/site-packages/jax/_src/numpy/lax_numpy.py", line 2131, in split
+    return _split("split", ary, indices_or_sections, axis=axis)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/scur0012/.venvs/fcgrad/lib/python3.12/site-packages/jax/_src/numpy/lax_numpy.py", line 2100, in _split
+    indices_or_sections = [
+                          ^
+jax.errors.ConcretizationTypeError: Abstract tracer value encountered where concrete value is expected: traced array with shape int32[].
+in jax.numpy.split argument 1
+The error occurred while tracing the function scan_fn at /gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO/ippo_cnn_coins.py:760 for scan. This value became a tracer due to JAX operations on these lines:
+
+  operation a:i32[19] = convert_element_type[new_dtype=int32 weak_type=False] b
+    from line /gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO/fcgrad_utils.py:33:51 (unflatten_grads)
+
+See https://jax.readthedocs.io/en/latest/errors.html#jax.errors.ConcretizationTypeError
+--------------------
+For simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.
