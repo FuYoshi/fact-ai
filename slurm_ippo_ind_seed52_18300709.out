@@ -1,0 +1,26 @@
+==============================================
+  Job: IPPO Individual Baseline
+  Seed: 52
+  Config: ippo_unfair_coin (1B steps)
+  Start: Tue Jan 13 18:31:02 CET 2026
+==============================================
+
+GPU Info:
+name, memory.total [MiB]
+NVIDIA A100-SXM4-40GB, 40960 MiB
+NVIDIA A100-SXM4-40GB, 40960 MiB
+NVIDIA A100-SXM4-40GB, 40960 MiB
+NVIDIA A100-SXM4-40GB, 40960 MiB
+
+Running IPPO: ippo_cnn_coins
+Config: ippo_unfair_coin
+Working directory: /gpfs/home1/scur0012/simon/fact_fcgrad
+
+
+🚀 Starting training: 3906 updates, 1,000,000,000 timesteps
+   JIT compiling... (this may take a while with 500 minibatches)
+
+Training:   0%|          | 0/3906 [00:00<?, ?update/s]📈 TensorBoard logs: ./runs/ippo_cnn_coin_game_seed52_20260113_183109
+input_obs_shape (512, 11, 11, 14)
+Training:   0%|          | 1/3906 [00:29<31:37:52, 29.16s/update, return=-0.00, step=256000][Update 1] Step 256,000 | Return: -0.00 | Red: 0.04 Green: -0.06
+Training:   0%|          | 2/3906 [00:33<18:03:45, 16.66s/update, return=-0.00, step=256000]Training:   0%|          | 2/3906 [00:33<18:03:45, 16.66s/update, return=-0.21, step=512000]Training:   0%|          | 3/3906 [00:37<18:03:29, 16.66s/update, return=-0.09, step=768000]Training:   0%|          | 4/3906 [00:41<18:03:12, 16.66s/update, return=-0.39, step=1024000]Training:   0%|          | 5/3906 [00:45<18:02:55, 16.66s/update, return=0.66, step=1280000] Training:   0%|          | 6/3906 [00:49<18:02:39, 16.66s/update, return=0.20, step=1536000]Training:   0%|          | 6/3906 [00:50<18:02:39, 16.66s/update, return=0.20, step=1536000]Training:   0%|          | 7/3906 [00:54<18:02:22, 16.66s/update, return=-0.51, step=1792000]Training:   0%|          | 8/3906 [00:58<18:02:05, 16.66s/update, return=0.94, step=2048000] Training:   0%|          | 9/3906 [01:02<18:01:49, 16.66s/update, return=0.04, step=2.3e+6] Training:   0%|          | 10/3906 [01:06<6:30:44,  6.02s/update, return=0.04, step=2.3e+6]Training:   0%|          | 10/3906 [01:06<6:30:44,  6.02s/update, return=1.96, step=2560000]Training:   0%|          | 11/3906 [01:10<6:30:38,  6.02s/update, return=0.61, step=2816000]Training:   0%|          | 12/3906 [01:14<6:30:32,  6.02s/update, return=1.64, step=3072000]Training:   0%|          | 13/3906 [01:19<6:30:26,  6.02s/update, return=1.09, step=3328000]Training:   0%|          | 13/3906 [01:20<6:30:26,  6.02s/update, return=1.09, step=3328000]Training:   0%|          | 14/3906 [01:23<6:30:20,  6.02s/update, return=0.91, step=3584000]Training:   0%|          | 15/3906 [01:27<6:30:14,  6.02s/update, return=-0.17, step=3840000]Training:   0%|          | 16/3906 [01:31<6:30:08,  6.02s/update, return=1.00, step=4.1e+6]  Training:   0%|          | 17/3906 [01:35<6:30:02,  6.02s/update, return=0.85, step=4352000]Training:   0%|          | 18/3906 [01:39<5:23:33,  4.99s/update, return=0.85, step=4352000]Training:   0%|          | 18/3906 [01:39<5:23:33,  4.99s/update, return=1.73, step=4608000]Training:   0%|          | 19/3906 [01:43<5:23:28,  4.99s/update, return=1.42, step=4864000]Training:   1%|          | 20/3906 [01:48<5:23:23,  4.99s/update, return=0.61, step=5120000]

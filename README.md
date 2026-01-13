@@ -103,6 +103,18 @@ From Appendix B of the FCGrad paper:
 | Test | ~10 min | ~11 | ~44 |
 | Full | ~24 hr | ~1,536 | ~6,144 |
 
+## Learning Curves
+
+Training automatically saves CSV logs to `./logs/`. Plot them with:
+
+```bash
+source ~/.venvs/fcgrad/bin/activate
+pip install pandas matplotlib  # if not already installed
+python plot_learning_curve.py --log-dir ./logs
+```
+
+This creates `./logs/learning_curves.png` showing all runs.
+
 ## Troubleshooting
 
 ### JAX not detecting GPU
