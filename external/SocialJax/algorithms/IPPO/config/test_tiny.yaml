@@ -1,0 +1,49 @@
+# =============================================================================
+# TINY TEST CONFIG - Just to verify CSV logging and WandB work
+# =============================================================================
+
+"LR": 0.0001
+"ANNEAL_LR": True
+
+# TINY settings for fast test
+"NUM_ENVS": 32
+"NUM_STEPS": 100
+"TOTAL_TIMESTEPS": 100000   # 100K steps = ~30 updates
+"UPDATE_EPOCHS": 2
+"NUM_MINIBATCHES": 4        # Fast JIT
+"GAMMA": 0.99
+"GAE_LAMBDA": 0.95
+"CLIP_EPS": 0.2
+"ENT_COEF": 0.1
+"VF_COEF": 0.1
+"MAX_GRAD_NORM": 0.5
+"ACTIVATION": "relu"
+
+# Environment
+"ENV_NAME": "coin_game"
+"ENV_KWARGS": 
+  "num_agents": 2
+  "num_inner_steps": 100
+  "shared_rewards": False
+  "green_coin_prob": 0.9375
+  "cnn": True
+  "jit": True
+
+"REW_SHAPING_HORIZON": 2.5e6
+"SHAPING_BEGIN": 1e6
+
+"SEED": 42
+"NUM_SEEDS": 1
+"REWARD": "individual"
+"GIF_NUM_FRAMES": 50
+"PARAMETER_SHARING": True
+
+"FCGRAD": False
+"FCGRAD_COLLECTIVE_WEIGHT": 1.0
+
+# WandB - online mode to test sync
+"ENTITY": ""
+"PROJECT": "fcgrad-test"
+"WANDB_MODE": "online"
+"WANDB_TAGS":
+  - TEST

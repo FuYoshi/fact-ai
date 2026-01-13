@@ -55,15 +55,9 @@ checkpoints/
 *.hdf5
 *.safetensors
 
-# Outputs and logs
+# Outputs (keep logs and evaluation for training info)
 outputs/
-logs/
 *.log
-evaluation/
-*.gif
-*.png
-*.jpg
-*.jpeg
 
 # OS files
 .DS_Store

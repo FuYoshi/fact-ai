@@ -1,4 +1,4 @@
-""" 
+"""
 Based on PureJaxRL & jaxmarl Implementation of PPO
 """
 import sys
@@ -25,6 +25,10 @@ import os
 import matplotlib.pyplot as plt
 from PIL import Image
 from pathlib import Path
+from tqdm import tqdm
+import csv
+from tensorboardX import SummaryWriter
+from datetime import datetime
 
 # FCGrad imports
 from fcgrad_utils import fcgrad_adjust, fcgrad_adjust_simple
@@ -130,12 +134,12 @@ def get_rollout(params, config):
         key, key_a0, key_a1, key_s = jax.random.split(key, 4)
 
         obs_batch = jnp.stack([obs[a] for a in env.agents]).reshape(-1, *env.observation_space()[0].shape)
-        if config["PARAMETER_SHARING"]: 
+        if config["PARAMETER_SHARING"]:
             pi, value = network.apply(params, obs_batch)
             action = pi.sample(seed=key_a0)
             env_act = unbatchify(
                 action, env.agents, 1, env.num_agents
-            )           
+            )
         else:
             env_act = {}
             for i in range(env.num_agents):
@@ -144,7 +148,7 @@ def get_rollout(params, config):
                 env_act[env.agents[i]] = action
 
 
-        
+
 
         env_act = {k: v.squeeze() for k, v in env_act.items()}
 
@@ -171,7 +175,7 @@ def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
     return {a: x[i] for i, a in enumerate(agent_list)}
 
 
-def make_train(config):
+def make_train(config, pbar=None, csv_writer=None, tb_writer=None):
     env = socialjax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     if config["PARAMETER_SHARING"]:
         config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
@@ -214,7 +218,7 @@ def make_train(config):
             network = ActorCritic(env.action_space().n, activation=config["ACTIVATION"])
         else:
             network = [ActorCritic(env.action_space().n, activation=config["ACTIVATION"]) for _ in range(env.num_agents)]
-        
+
         rng, _rng = jax.random.split(rng)
         init_x = jnp.zeros((1, *(env.observation_space()[0]).shape))
 
@@ -260,9 +264,9 @@ def make_train(config):
                 rng, _rng = jax.random.split(rng)
 
 
-                
+
                 # obs_batch = jnp.stack([last_obs[a] for a in env.agents]).reshape(-1, *env.observation_space().shape)
-                
+
                 if config["PARAMETER_SHARING"]:
                     obs_batch = jnp.transpose(last_obs,(1,0,2,3,4)).reshape(-1, *(env.observation_space()[0]).shape)
                     print("input_obs_shape", obs_batch.shape)
@@ -289,7 +293,7 @@ def make_train(config):
 
                 # env_act = {k: v.flatten() for k, v in env_act.items()}
                 env_act = [v for v in env_act.values()]
-                
+
                 # STEP ENV
                 rng, _rng = jax.random.split(rng)
                 rng_step = jax.random.split(_rng, config["NUM_ENVS"])
@@ -302,7 +306,7 @@ def make_train(config):
                 # shaped_reward = compute_grouped_rewards(reward)
                 # reward = jax.tree_map(lambda x,y: x*rew_shaping_anneal_org(current_timestep)+y*rew_shaping_anneal(current_timestep), reward, shaped_reward)
 
-                
+
                 if config["PARAMETER_SHARING"]:
                     info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
                     transition = Transition(
@@ -365,7 +369,7 @@ def make_train(config):
                         + config["GAMMA"] * config["GAE_LAMBDA"] * (1 - done) * gae
                     )
                     return (gae, value), gae
-                
+
                 _, advantages = jax.lax.scan(
                     _get_advantages,
                     (jnp.zeros_like(last_val), last_val),
@@ -390,7 +394,7 @@ def make_train(config):
                 def _update_minbatch(train_state, batch_info, network_used, collective_advantages_minibatch=None, collective_targets_minibatch=None):
                     """
                     Update a single minibatch.
-                    
+
                     Args:
                         train_state: Current training state
                         batch_info: Tuple of (traj_batch, advantages, targets) - SHUFFLED minibatch
@@ -440,16 +444,16 @@ def make_train(config):
                     def _collective_loss_fn(params, traj_batch, gae, targets, network_used, gae_collective=None):
                         """
                         Loss function for COLLECTIVE objective in FCGrad.
-                        
+
                         Paper: R_col = (1/N) * sum(R^i) - the mean return across ALL agents.
                         The collective gradient encourages actions that improve the mean return.
-                        
+
                         FIXED: gae_collective is now pre-computed and aligned with this minibatch.
                         """
                         # RERUN NETWORK
                         pi, value = network_used.apply(params, traj_batch.obs)
                         log_prob = pi.log_prob(traj_batch.action)
-                        
+
                         # CALCULATE VALUE LOSS (same as individual)
                         value_pred_clipped = traj_batch.value + (
                             value - traj_batch.value
@@ -462,14 +466,14 @@ def make_train(config):
 
                         # CALCULATE ACTOR LOSS with COLLECTIVE advantages
                         ratio = jnp.exp(log_prob - traj_batch.log_prob)
-                        
+
                         # Use pre-aligned collective advantages (already shuffled with same permutation)
                         if gae_collective is None:
                             gae_collective = gae
-                        
+
                         # Normalize collective advantages (self-normalized)
                         gae_collective = (gae_collective - gae_collective.mean()) / (gae_collective.std() + 1e-8)
-                        
+
                         loss_actor1 = ratio * gae_collective
                         loss_actor2 = (
                             jnp.clip(
@@ -495,22 +499,22 @@ def make_train(config):
                     (total_loss, aux), grads_individual = grad_fn(
                             train_state.params, traj_batch, advantages, targets, network_used
                         )
-                    
+
                     # Apply FCGrad if enabled
                     if config.get("FCGRAD", False):
                         # FCGrad: Fair Conflict-aware Gradient Adjustment
                         # Paper: prioritize the objective with LOWER return (disadvantaged)
-                        
+
                         # Individual return: mean of this agent's TD(λ) targets for this minibatch
                         individual_return = jnp.mean(targets)
-                        
+
                         # Collective return: mean of collective targets for this minibatch
                         # FIXED: Now uses aligned minibatch data instead of full unshuffled data
                         if collective_targets_minibatch is not None:
                             collective_return = jnp.mean(collective_targets_minibatch)
                         else:
                             collective_return = jnp.mean(targets)
-                        
+
                         # Compute collective gradient
                         # FIXED: Pass pre-aligned collective advantages for this minibatch
                         grad_fn_collective = jax.value_and_grad(_collective_loss_fn, has_aux=True)
@@ -518,18 +522,18 @@ def make_train(config):
                             train_state.params, traj_batch, advantages, targets, network_used,
                             gae_collective=collective_advantages_minibatch
                         )
-                        
+
                         # Apply FCGrad adjustment
                         # Paper: lower return = disadvantaged = prioritized
                         grads = fcgrad_adjust(
-                            grads_individual, 
+                            grads_individual,
                             grads_collective,
                             individual_return,   # individual return (higher = better)
                             collective_return    # collective return (higher = better)
                         )
                     else:
                         grads = grads_individual
-                    
+
                     train_state = train_state.apply_gradients(grads=grads)
                     return train_state, (total_loss, aux)
 
@@ -540,28 +544,28 @@ def make_train(config):
                     batch_size == config["NUM_STEPS"] * config["NUM_ACTORS"]
                 ), "batch size must be equal to number of steps * number of actors"
                 permutation = jax.random.permutation(_rng, batch_size)
-                
+
                 # Prepare individual batch
                 batch = (traj_batch, advantages, targets)
                 batch = jax.tree_util.tree_map(
                         lambda x: x.reshape((batch_size,) + x.shape[2:]), batch
                     )
-                
+
                 # FIXED: Compute collective advantages/targets BEFORE shuffling, then shuffle with SAME permutation
                 if config.get("FCGRAD", False) and all_advantages is not None:
                     # Collective advantage = mean across all agents' advantages
                     # all_advantages shape: [num_agents, num_steps, num_envs]
                     collective_advantages = jnp.mean(all_advantages, axis=0)  # [num_steps, num_envs]
                     collective_advantages = collective_advantages.reshape((batch_size,))
-                    
+
                     # Collective targets = mean across all agents' targets
                     collective_targets = jnp.mean(all_targets_global, axis=0)  # [num_steps, num_envs]
                     collective_targets = collective_targets.reshape((batch_size,))
-                    
+
                     # Shuffle with SAME permutation as individual data
                     collective_advantages = jnp.take(collective_advantages, permutation, axis=0)
                     collective_targets = jnp.take(collective_targets, permutation, axis=0)
-                    
+
                     # Split into minibatches
                     collective_advantages_minibatches = jnp.reshape(
                         collective_advantages, [config["NUM_MINIBATCHES"], -1]
@@ -572,7 +576,7 @@ def make_train(config):
                 else:
                     collective_advantages_minibatches = None
                     collective_targets_minibatches = None
-                
+
                 shuffled_batch = jax.tree_util.tree_map(
                     lambda x: jnp.take(x, permutation, axis=0), batch
                 )
@@ -582,12 +586,12 @@ def make_train(config):
                     ),
                     shuffled_batch,
                 )
-                
+
                 if config["PARAMETER_SHARING"]:
                     # For parameter sharing, scan over minibatches with None collective data
                     # (FCGrad not fully supported with parameter sharing - need separate handling)
                     train_state, total_loss = jax.lax.scan(
-                        lambda state, batch_info: _update_minbatch(state, batch_info, network, None, None), 
+                        lambda state, batch_info: _update_minbatch(state, batch_info, network, None, None),
                         train_state, minibatches
                     )
                 else:
@@ -597,19 +601,19 @@ def make_train(config):
                         def scan_fn(state, inputs):
                             batch_info, coll_adv, coll_tgt = inputs
                             return _update_minbatch(state, batch_info, network[i], coll_adv, coll_tgt)
-                        
+
                         # Stack inputs for scan
                         scan_inputs = (minibatches, collective_advantages_minibatches, collective_targets_minibatches)
                         train_state, total_loss = jax.lax.scan(scan_fn, train_state, scan_inputs)
                     else:
                         train_state, total_loss = jax.lax.scan(
-                            lambda state, batch_info: _update_minbatch(state, batch_info, network[i], None, None), 
+                            lambda state, batch_info: _update_minbatch(state, batch_info, network[i], None, None),
                             train_state, minibatches
                         )
 
                 update_state = (train_state, traj_batch, advantages, targets, rng)
                 return update_state, total_loss
-            
+
             if config["PARAMETER_SHARING"]:
                 update_state = (train_state, traj_batch, advantages, targets, rng)
                 update_state, loss_info = jax.lax.scan(
@@ -632,11 +636,81 @@ def make_train(config):
                     metric_i['loss'] = loss_info[0]
                     metric.append(metric_i)
                     rng = update_state[-1]
-                
+
             def callback(metric):
                 wandb.log(metric)
+                # Update progress bar if available
+                if pbar is not None:
+                    pbar.update(1)
+                    pbar.set_postfix({
+                        'return': f"{float(metric.get('returned_episode_returns', 0)):.2f}",
+                        'step': int(metric.get('env_step', 0))
+                    })
+                # Print periodic status for batch job logs (every 100 updates)
+                update = int(metric.get('update_step', 0))
+                if update % 100 == 0 or update == 1:
+                    r_red = float(metric.get('return_red', 0))
+                    r_green = float(metric.get('return_green', 0))
+                    print(f"[Update {update}] Step {int(metric.get('env_step', 0)):,} | "
+                          f"Return: {float(metric.get('returned_episode_returns', 0)):.2f} | "
+                          f"Red: {r_red:.2f} Green: {r_green:.2f}", flush=True)
+                # Write to CSV if available
+                if csv_writer is not None:
+                    csv_writer.writerow([
+                        int(metric.get('update_step', 0)),
+                        int(metric.get('env_step', 0)),
+                        float(metric.get('returned_episode_returns', 0)),
+                        float(metric.get('return_red', 0)),
+                        float(metric.get('return_green', 0)),
+                        float(metric.get('eat_own_coins', 0)),
+                        float(metric.get('loss', 0))
+                    ])
+                # Write to TensorBoard if available
+                if tb_writer is not None:
+                    step = int(metric.get('env_step', 0))
+                    # Main metrics
+                    tb_writer.add_scalar('episode/return_mean', float(metric.get('returned_episode_returns', 0)), step)
+                    tb_writer.add_scalar('episode/return_red', float(metric.get('return_red', 0)), step)
+                    tb_writer.add_scalar('episode/return_green', float(metric.get('return_green', 0)), step)
+                    tb_writer.add_scalar('episode/eat_own_coins', float(metric.get('eat_own_coins', 0)), step)
+                    tb_writer.add_scalar('episode/length', float(metric.get('returned_episode_lengths', 0)), step)
+                    # Fairness metrics (computed on the fly)
+                    r_red = float(metric.get('return_red', 0))
+                    r_green = float(metric.get('return_green', 0))
+                    # Gini: use absolute values to handle negative returns
+                    total = abs(r_red) + abs(r_green)
+                    if total > 0:
+                        gini = abs(r_red - r_green) / (total + 1e-8)
+                        # Jain: only meaningful for positive returns
+                        if r_red > 0 and r_green > 0:
+                            jain = (r_red + r_green)**2 / (2 * (r_red**2 + r_green**2 + 1e-8))
+                        else:
+                            jain = 0.0  # Unfair if one agent has negative return
+                        tb_writer.add_scalar('fairness/gini', gini, step)
+                        tb_writer.add_scalar('fairness/jain', jain, step)
+                        tb_writer.add_scalar('fairness/min_return', min(r_red, r_green), step)
+                    # Training loss (if available)
+                    if 'loss' in metric:
+                        tb_writer.add_scalar('train/total_loss', float(metric.get('loss', 0)), step)
+                    if 'value_loss' in metric:
+                        tb_writer.add_scalar('train/value_loss', float(metric.get('value_loss', 0)), step)
+                    if 'actor_loss' in metric:
+                        tb_writer.add_scalar('train/actor_loss', float(metric.get('actor_loss', 0)), step)
+                    if 'entropy' in metric:
+                        tb_writer.add_scalar('train/entropy', float(metric.get('entropy', 0)), step)
+
 
             update_step = update_step + 1
+            
+            # Extract per-agent returns BEFORE taking mean (for fairness metrics)
+            if config["PARAMETER_SHARING"]:
+                # Get raw per-agent returns before mean
+                raw_returns = metric["returned_episode_returns"]  # shape: (num_envs, num_agents) or similar
+                per_agent_returns = jnp.mean(raw_returns, axis=0)  # mean over envs, keep agents
+            else:
+                # For non-parameter-sharing, collect from each agent's metric
+                per_agent_returns = jnp.array([m["returned_episode_returns"].mean() for m in metric])
+            
             metric = jax.tree_map(lambda x: x.mean(), metric)
             if config["PARAMETER_SHARING"]:
                 metric["update_step"] = update_step
@@ -651,6 +725,11 @@ def make_train(config):
             metric["update_step"] = update_step
             metric["env_step"] = update_step * config["NUM_STEPS"] * config["NUM_ENVS"]
             metric["eat_own_coins"] = metric["eat_own_coins"] * config["ENV_KWARGS"]["num_inner_steps"]
+            
+            # Add per-agent returns for fairness analysis
+            metric["return_red"] = per_agent_returns[0]    # Agent 0 = Red
+            metric["return_green"] = per_agent_returns[1]  # Agent 1 = Green
+            
             jax.debug.callback(callback, metric)
 
             runner_state = (train_state, env_state, last_obs, update_step, rng)
@@ -674,14 +753,14 @@ def single_run(config):
     fcgrad_enabled = config.get("FCGRAD", False)
     algo_name = "fcgrad" if fcgrad_enabled else "ippo"
     run_name = f'{algo_name}_cnn_{config["ENV_NAME"]}'
-    
+
     if fcgrad_enabled:
         print("=" * 60)
         print("FCGrad ENABLED - Fair Conflict-aware Gradient Adjustment")
         print("=" * 60)
-    
+
     tags = ["FCGRAD" if fcgrad_enabled else "IPPO", "FF"]
-    
+
     wandb.init(
         entity=config["ENTITY"],
         project=config["PROJECT"],
@@ -693,8 +772,38 @@ def single_run(config):
 
     rng = jax.random.PRNGKey(config["SEED"])
     rngs = jax.random.split(rng, config["NUM_SEEDS"])
-    train_jit = jax.jit(make_train(config))
+    
+    # Calculate number of updates for progress bar
+    num_updates = int(config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"])
+    
+    print(f"\n🚀 Starting training: {num_updates} updates, {int(config['TOTAL_TIMESTEPS']):,} timesteps")
+    print(f"   JIT compiling... (this may take a while with {config['NUM_MINIBATCHES']} minibatches)\n")
+    
+    # Create progress bar (with settings for batch jobs)
+    # mininterval=30 means update at most every 30 seconds (cleaner logs)
+    pbar = tqdm(total=num_updates, desc="Training", unit="update", 
+                mininterval=30, file=sys.stdout, dynamic_ncols=False)
+    
+    # Create CSV log file for learning curve (with timestamp to avoid overwriting)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    csv_path = f"./logs/{run_name}_seed{config['SEED']}_{timestamp}.csv"
+    os.makedirs("./logs", exist_ok=True)
+    csv_file = open(csv_path, 'w', newline='')
+    csv_writer = csv.writer(csv_file)
+    csv_writer.writerow(['update_step', 'env_step', 'returned_episode_returns', 'return_red', 'return_green', 'eat_own_coins', 'loss'])
+    
+    # Create TensorBoard writer
+    tb_log_dir = f"./runs/{run_name}_seed{config['SEED']}_{timestamp}"
+    tb_writer = SummaryWriter(log_dir=tb_log_dir)
+    print(f"📈 TensorBoard logs: {tb_log_dir}")
+    
+    train_jit = jax.jit(make_train(config, pbar=pbar, csv_writer=csv_writer, tb_writer=tb_writer))
     out = jax.vmap(train_jit)(rngs)
+    
+    pbar.close()
+    csv_file.close()
+    tb_writer.close()
+    print(f"📊 Learning curve saved to: {csv_path}")
 
     print("** Saving Results **")
     filename = f'{config["ENV_NAME"]}_seed{config["SEED"]}'
@@ -710,7 +819,7 @@ def single_run(config):
             save_path = f"./checkpoints/individual/{filename}_{i}.pkl"
             save_params(train_state[i], save_path)
             params.append(load_params(save_path))
-    evaluate(params, socialjax.make(config["ENV_NAME"], **config["ENV_KWARGS"]), save_path, config)
+    evaluate(params, socialjax.make(config["ENV_NAME"], **config["ENV_KWARGS"]), save_path, config, timestamp)
     # state_seq = get_rollout(train_state.params, config)
     # viz = OvercookedVisualizer()
     # agent_view_size is hardcoded as it determines the padding around the layout.
@@ -728,13 +837,13 @@ def load_params(load_path):
         params = pickle.load(f)
     return jax.tree_util.tree_map(lambda x: jnp.array(x), params)
 
-def evaluate(params, env, save_path, config):
+def evaluate(params, env, save_path, config, timestamp=None):
     rng = jax.random.PRNGKey(0)
-    
+
     rng, _rng = jax.random.split(rng)
     obs, state = env.reset(_rng)
     done = False
-    
+
     pics = []
     img = env.render(state)
     pics.append(img)
@@ -767,31 +876,32 @@ def evaluate(params, env, save_path, config):
                 single_action = pi.sample(seed=_rng)
                 env_act[env.agents[i]] = single_action
 
-        
+
         # 执行动作
         rng, _rng = jax.random.split(rng)
         obs, state, reward, done, info = env.step(_rng, state, [v.item() for v in env_act.values()])
         done = done["__all__"]
-        
+
         # 记录结果
         # episode_reward += sum(reward.values())
-        
+
         # 渲染
         img = env.render(state)
         pics.append(img)
-        
+
         print('###################')
         print(f'Actions: {env_act}')
         print(f'Reward: {reward}')
         # print(f'State: {state.agent_locs}')
         # print(f'State: {state.claimed_indicator_time_matrix}')
         print("###################")
-    
+
     # 保存GIF
     print(f"Saving Episode GIF")
     pics = [Image.fromarray(np.array(img)) for img in pics]
     n_agents = len(env.agents)
-    gif_path = f"{root_dir}/{n_agents}-agents_seed-{config['SEED']}_frames-{o_t + 1}.gif"
+    timestamp_str = f"_{timestamp}" if timestamp else ""
+    gif_path = f"{root_dir}/{n_agents}-agents_seed-{config['SEED']}_frames-{o_t + 1}{timestamp_str}.gif"
     pics[0].save(
         gif_path,
         format="GIF",
@@ -805,7 +915,7 @@ def evaluate(params, env, save_path, config):
     # Log the GIF to WandB
     print("Logging GIF to WandB")
     wandb.log({"Episode GIF": wandb.Video(gif_path, caption="Evaluation Episode", format="gif")})
-        
+
         # print(f"Episode {episode} total reward: {episode_reward}")
 def tune(default_config):
     """
