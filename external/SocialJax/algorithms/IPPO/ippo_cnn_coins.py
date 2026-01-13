@@ -74,8 +74,22 @@ class CNN(nn.Module):
 
 
 class ActorCritic(nn.Module):
+    """
+    Actor-Critic network with TWO value heads for FCGrad (paper-faithful).
+    
+    Paper architecture:
+    - Shared CNN encoder (3 conv layers)
+    - Shared FC layer (64 units)
+    - Actor head: categorical policy
+    - V_ind head: individual value estimate (trained on individual rewards)
+    - V_col head: collective value estimate (trained on collective rewards)
+    
+    The two-head design allows computing separate gradients for individual
+    and collective objectives, which FCGrad uses for conflict-aware adjustment.
+    """
     action_dim: Sequence[int]
     activation: str = "relu"
+    use_collective_head: bool = True  # Enable V_col for FCGrad
 
     @nn.compact
     def __call__(self, x):
@@ -86,6 +100,7 @@ class ActorCritic(nn.Module):
 
         embedding = CNN(self.activation)(x)
 
+        # Actor head
         actor_mean = nn.Dense(
             64, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
         )(embedding)
@@ -95,22 +110,46 @@ class ActorCritic(nn.Module):
         )(actor_mean)
         pi = distrax.Categorical(logits=actor_mean)
 
-        critic = nn.Dense(
+        # V_ind: Individual value head (standard critic)
+        critic_ind = nn.Dense(
             64, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
         )(embedding)
-        critic = activation(critic)
-        critic = nn.Dense(1, kernel_init=orthogonal(1.0), bias_init=constant(0.0))(
-            critic
+        critic_ind = activation(critic_ind)
+        critic_ind = nn.Dense(1, kernel_init=orthogonal(1.0), bias_init=constant(0.0))(
+            critic_ind
         )
+        value_ind = jnp.squeeze(critic_ind, axis=-1)
 
-        return pi, jnp.squeeze(critic, axis=-1)
+        if self.use_collective_head:
+            # V_col: Collective value head (for FCGrad)
+            # Paper: "separate value heads sharing the encoder"
+            critic_col = nn.Dense(
+                64, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
+            )(embedding)
+            critic_col = activation(critic_col)
+            critic_col = nn.Dense(1, kernel_init=orthogonal(1.0), bias_init=constant(0.0))(
+                critic_col
+            )
+            value_col = jnp.squeeze(critic_col, axis=-1)
+            return pi, value_ind, value_col
+        else:
+            # Backward compatible: return only individual value
+            return pi, value_ind
 
 
 class Transition(NamedTuple):
+    """
+    Transition tuple for PPO with FCGrad support.
+    
+    For FCGrad, we store both individual and collective values/rewards
+    to compute separate advantages for each objective.
+    """
     done: jnp.ndarray
     action: jnp.ndarray
-    value: jnp.ndarray
-    reward: jnp.ndarray
+    value: jnp.ndarray           # V_ind: individual value estimate
+    value_col: jnp.ndarray       # V_col: collective value estimate (for FCGrad)
+    reward: jnp.ndarray          # Individual reward
+    reward_col: jnp.ndarray      # Collective reward = mean(all agent rewards)
     log_prob: jnp.ndarray
     obs: jnp.ndarray
     info: jnp.ndarray
@@ -118,10 +157,11 @@ class Transition(NamedTuple):
 
 def get_rollout(params, config):
     env = socialjax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    use_dual_head = config.get("FCGRAD", False) or config.get("USE_DUAL_HEAD", True)
     if config["PARAMETER_SHARING"]:
-        network = ActorCritic(env.action_space().n, activation=config["ACTIVATION"])
+        network = ActorCritic(env.action_space().n, activation=config["ACTIVATION"], use_collective_head=use_dual_head)
     else:
-        network = [ActorCritic(env.action_space().n, activation=config["ACTIVATION"]) for _ in range(env.num_agents)]
+        network = [ActorCritic(env.action_space().n, activation=config["ACTIVATION"], use_collective_head=use_dual_head) for _ in range(env.num_agents)]
     key = jax.random.PRNGKey(0)
     key, key_r, key_a = jax.random.split(key, 3)
 
@@ -135,7 +175,8 @@ def get_rollout(params, config):
 
         obs_batch = jnp.stack([obs[a] for a in env.agents]).reshape(-1, *env.observation_space()[0].shape)
         if config["PARAMETER_SHARING"]:
-            pi, value = network.apply(params, obs_batch)
+            net_out = network.apply(params, obs_batch)
+            pi = net_out[0]
             action = pi.sample(seed=key_a0)
             env_act = unbatchify(
                 action, env.agents, 1, env.num_agents
@@ -143,7 +184,8 @@ def get_rollout(params, config):
         else:
             env_act = {}
             for i in range(env.num_agents):
-                pi, value = network[i].apply(params[i], obs_batch)
+                net_out = network[i].apply(params[i], obs_batch)
+                pi = net_out[0]
                 action = pi.sample(seed=key_a0)
                 env_act[env.agents[i]] = action
 
@@ -214,10 +256,14 @@ def make_train(config, pbar=None, csv_writer=None, tb_writer=None):
     def train(rng):
 
         # INIT NETWORK
+        # Paper: Always use two-head architecture for fair comparison
+        # (even Individual baseline uses same backbone, just ignores V_col)
+        use_dual_head = config.get("FCGRAD", False) or config.get("USE_DUAL_HEAD", True)
+        
         if config["PARAMETER_SHARING"]:
-            network = ActorCritic(env.action_space().n, activation=config["ACTIVATION"])
+            network = ActorCritic(env.action_space().n, activation=config["ACTIVATION"], use_collective_head=use_dual_head)
         else:
-            network = [ActorCritic(env.action_space().n, activation=config["ACTIVATION"]) for _ in range(env.num_agents)]
+            network = [ActorCritic(env.action_space().n, activation=config["ACTIVATION"], use_collective_head=use_dual_head) for _ in range(env.num_agents)]
 
         rng, _rng = jax.random.split(rng)
         init_x = jnp.zeros((1, *(env.observation_space()[0]).shape))
@@ -270,7 +316,12 @@ def make_train(config, pbar=None, csv_writer=None, tb_writer=None):
                 if config["PARAMETER_SHARING"]:
                     obs_batch = jnp.transpose(last_obs,(1,0,2,3,4)).reshape(-1, *(env.observation_space()[0]).shape)
                     print("input_obs_shape", obs_batch.shape)
-                    pi, value = network.apply(train_state.params, obs_batch)
+                    net_out = network.apply(train_state.params, obs_batch)
+                    if len(net_out) == 3:
+                        pi, value, value_col = net_out
+                    else:
+                        pi, value = net_out
+                        value_col = value  # Fallback: use same value for both
                     action = pi.sample(seed=_rng)
                     log_prob = pi.log_prob(action)
                     env_act = unbatchify(
@@ -281,13 +332,20 @@ def make_train(config, pbar=None, csv_writer=None, tb_writer=None):
                     env_act = {}
                     log_prob = []
                     value = []
+                    value_col = []
                     for i in range(env.num_agents):
                         print("input_obs_shape", obs_batch[i].shape)
-                        pi, value_i = network[i].apply(train_state[i].params, obs_batch[i])
+                        net_out = network[i].apply(train_state[i].params, obs_batch[i])
+                        if len(net_out) == 3:
+                            pi, value_i, value_col_i = net_out
+                        else:
+                            pi, value_i = net_out
+                            value_col_i = value_i
                         action = pi.sample(seed=_rng)
                         log_prob.append(pi.log_prob(action))
                         env_act[env.agents[i]] = action
                         value.append(value_i)
+                        value_col.append(value_col_i)
 
 
 
@@ -307,13 +365,20 @@ def make_train(config, pbar=None, csv_writer=None, tb_writer=None):
                 # reward = jax.tree_map(lambda x,y: x*rew_shaping_anneal_org(current_timestep)+y*rew_shaping_anneal(current_timestep), reward, shaped_reward)
 
 
+                # Compute collective reward = mean of all agent rewards
+                # Paper: R_col = (1/N) * sum(R^i)
+                reward_collective = jnp.mean(reward, axis=1, keepdims=True)  # [num_envs, 1]
+                reward_collective = jnp.broadcast_to(reward_collective, reward.shape)  # Same for all agents
+                
                 if config["PARAMETER_SHARING"]:
                     info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
                     transition = Transition(
                         batchify_dict(done, env.agents, config["NUM_ACTORS"]).squeeze(),
                         action,
                         value,
+                        value_col,  # V_col estimates
                         batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze(),
+                        batchify(reward_collective, env.agents, config["NUM_ACTORS"]).squeeze(),  # Collective reward
                         log_prob,
                         obs_batch,
                         info,
@@ -322,12 +387,14 @@ def make_train(config, pbar=None, csv_writer=None, tb_writer=None):
                     transition = []
                     done = [v for v in done.values()]
                     for i in range(env.num_agents):
-                        info_i = {key: jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"]),1), value[:,i]) for key, value in info.items()}
+                        info_i = {key: jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"]),1), val[:,i]) for key, val in info.items()}
                         transition.append(Transition(
                             done[i],
                             env_act[i],
                             value[i],
+                            value_col[i],  # V_col for this agent
                             reward[:,i],
+                            reward_collective[:,i],  # Collective reward (same for all agents)
                             log_prob[i],
                             obs_batch[i],
                             info_i,
@@ -343,26 +410,49 @@ def make_train(config, pbar=None, csv_writer=None, tb_writer=None):
             train_state, env_state, last_obs, update_step, rng = runner_state
             if config["PARAMETER_SHARING"]:
                 last_obs_batch = jnp.transpose(last_obs,(1,0,2,3,4)).reshape(-1, *(env.observation_space()[0]).shape)
-                _, last_val = network.apply(train_state.params, last_obs_batch)
+                net_out = network.apply(train_state.params, last_obs_batch)
+                if len(net_out) == 3:
+                    _, last_val, last_val_col = net_out
+                else:
+                    _, last_val = net_out
+                    last_val_col = last_val
             else:
                 last_obs_batch = jnp.transpose(last_obs,(1,0,2,3,4))
                 last_val = []
+                last_val_col = []
                 for i in range(env.num_agents):
-                    _, last_val_i = network[i].apply(train_state[i].params, last_obs_batch[i])
+                    net_out = network[i].apply(train_state[i].params, last_obs_batch[i])
+                    if len(net_out) == 3:
+                        _, last_val_i, last_val_col_i = net_out
+                    else:
+                        _, last_val_i = net_out
+                        last_val_col_i = last_val_i
                     last_val.append(last_val_i)
+                    last_val_col.append(last_val_col_i)
                 last_val = jnp.stack(last_val, axis=0)
+                last_val_col = jnp.stack(last_val_col, axis=0)
 
-            def _calculate_gae(traj_batch, last_val):
+            def _calculate_gae(traj_batch, last_val, use_collective=False):
+                """
+                Calculate GAE advantages.
+                
+                Args:
+                    traj_batch: Trajectory batch
+                    last_val: Bootstrap value (V_ind or V_col)
+                    use_collective: If True, use collective values/rewards for V_col training
+                """
                 def _get_advantages(gae_and_next_value, transition):
                     gae, next_value = gae_and_next_value
-                    done, value, reward = (
-                        transition.done,
-                        transition.value,
-                        transition.reward,
-                    )
-                    # reward_mean = jnp.mean(reward, axis=0)
-                    # # reward_std = jnp.std(reward, axis=0) + 1e-8
-                    # reward = (reward - reward_mean)# / reward_std
+                    done = transition.done
+                    if use_collective:
+                        # For V_col: use collective value and collective reward
+                        value = transition.value_col
+                        reward = transition.reward_col
+                    else:
+                        # For V_ind: use individual value and individual reward
+                        value = transition.value
+                        reward = transition.reward
+                    
                     delta = reward + config["GAMMA"] * next_value * (1 - done) - value
                     gae = (
                         delta
@@ -377,18 +467,34 @@ def make_train(config, pbar=None, csv_writer=None, tb_writer=None):
                     reverse=True,
                     unroll=16,
                 )
-                return advantages, advantages + traj_batch.value
+                if use_collective:
+                    return advantages, advantages + traj_batch.value_col
+                else:
+                    return advantages, advantages + traj_batch.value
+            
+            # Compute individual advantages (for V_ind)
             if config["PARAMETER_SHARING"]:
-                advantages, targets = _calculate_gae(traj_batch, last_val)
+                advantages, targets = _calculate_gae(traj_batch, last_val, use_collective=False)
+                # Compute collective advantages (for V_col and FCGrad)
+                advantages_col, targets_col = _calculate_gae(traj_batch, last_val_col, use_collective=True)
             else:
                 advantages = []
                 targets = []
+                advantages_col = []
+                targets_col = []
                 for i in range(env.num_agents):
-                    advantages_i, targets_i = _calculate_gae(traj_batch[i], last_val[i])
+                    # Individual
+                    advantages_i, targets_i = _calculate_gae(traj_batch[i], last_val[i], use_collective=False)
                     advantages.append(advantages_i)
                     targets.append(targets_i)
+                    # Collective
+                    advantages_col_i, targets_col_i = _calculate_gae(traj_batch[i], last_val_col[i], use_collective=True)
+                    advantages_col.append(advantages_col_i)
+                    targets_col.append(targets_col_i)
                 advantages = jnp.stack(advantages, axis=0)
                 targets = jnp.stack(targets, axis=0)
+                advantages_col = jnp.stack(advantages_col, axis=0)
+                targets_col = jnp.stack(targets_col, axis=0)
             # UPDATE NETWORK
             def _update_epoch(update_state, unused, i, all_advantages=None, all_targets_global=None):
                 def _update_minbatch(train_state, batch_info, network_used, collective_advantages_minibatch=None, collective_targets_minibatch=None):
@@ -404,21 +510,49 @@ def make_train(config, pbar=None, csv_writer=None, tb_writer=None):
                     """
                     traj_batch, advantages, targets = batch_info
 
-                    def _loss_fn(params, traj_batch, gae, targets, network_used):
+                    def _loss_fn(params, traj_batch, gae, targets, targets_col, network_used):
+                        """
+                        Loss function for INDIVIDUAL objective.
+                        
+                        Paper-faithful: trains BOTH value heads:
+                        - V_ind on individual targets
+                        - V_col on collective targets
+                        But actor loss uses individual advantages.
+                        """
                         # RERUN NETWORK
-                        pi, value = network_used.apply(params, traj_batch.obs)
+                        net_out = network_used.apply(params, traj_batch.obs)
+                        if len(net_out) == 3:
+                            pi, value_ind, value_col = net_out
+                        else:
+                            pi, value_ind = net_out
+                            value_col = value_ind
+                        
                         log_prob = pi.log_prob(traj_batch.action)
-                        # CALCULATE VALUE LOSS
+                        
+                        # CALCULATE VALUE LOSS for V_ind (individual targets)
                         value_pred_clipped = traj_batch.value + (
-                            value - traj_batch.value
+                            value_ind - traj_batch.value
                         ).clip(-config["CLIP_EPS"], config["CLIP_EPS"])
-                        value_losses = jnp.square(value - targets)
+                        value_losses = jnp.square(value_ind - targets)
                         value_losses_clipped = jnp.square(value_pred_clipped - targets)
-                        value_loss = (
+                        value_loss_ind = (
                             0.5 * jnp.maximum(value_losses, value_losses_clipped).mean()
                         )
+                        
+                        # CALCULATE VALUE LOSS for V_col (collective targets)
+                        value_col_pred_clipped = traj_batch.value_col + (
+                            value_col - traj_batch.value_col
+                        ).clip(-config["CLIP_EPS"], config["CLIP_EPS"])
+                        value_col_losses = jnp.square(value_col - targets_col)
+                        value_col_losses_clipped = jnp.square(value_col_pred_clipped - targets_col)
+                        value_loss_col = (
+                            0.5 * jnp.maximum(value_col_losses, value_col_losses_clipped).mean()
+                        )
+                        
+                        # Combined value loss (train both heads)
+                        value_loss = value_loss_ind + value_loss_col
 
-                        # CALCULATE ACTOR LOSS
+                        # CALCULATE ACTOR LOSS (using individual advantages)
                         ratio = jnp.exp(log_prob - traj_batch.log_prob)
                         gae = (gae - gae.mean()) / (gae.std() + 1e-8)
                         loss_actor1 = ratio * gae
@@ -441,37 +575,55 @@ def make_train(config, pbar=None, csv_writer=None, tb_writer=None):
                         )
                         return total_loss, (value_loss, loss_actor, entropy)
 
-                    def _collective_loss_fn(params, traj_batch, gae, targets, network_used, gae_collective=None):
+                    def _collective_loss_fn(params, traj_batch, gae, targets, targets_col, network_used, gae_collective=None):
                         """
                         Loss function for COLLECTIVE objective in FCGrad.
 
                         Paper: R_col = (1/N) * sum(R^i) - the mean return across ALL agents.
                         The collective gradient encourages actions that improve the mean return.
-
-                        FIXED: gae_collective is now pre-computed and aligned with this minibatch.
+                        
+                        Uses V_col head's advantages for actor loss.
                         """
                         # RERUN NETWORK
-                        pi, value = network_used.apply(params, traj_batch.obs)
+                        net_out = network_used.apply(params, traj_batch.obs)
+                        if len(net_out) == 3:
+                            pi, value_ind, value_col = net_out
+                        else:
+                            pi, value_ind = net_out
+                            value_col = value_ind
+                        
                         log_prob = pi.log_prob(traj_batch.action)
 
-                        # CALCULATE VALUE LOSS (same as individual)
+                        # CALCULATE VALUE LOSS for V_ind
                         value_pred_clipped = traj_batch.value + (
-                            value - traj_batch.value
+                            value_ind - traj_batch.value
                         ).clip(-config["CLIP_EPS"], config["CLIP_EPS"])
-                        value_losses = jnp.square(value - targets)
+                        value_losses = jnp.square(value_ind - targets)
                         value_losses_clipped = jnp.square(value_pred_clipped - targets)
-                        value_loss = (
+                        value_loss_ind = (
                             0.5 * jnp.maximum(value_losses, value_losses_clipped).mean()
                         )
+                        
+                        # CALCULATE VALUE LOSS for V_col
+                        value_col_pred_clipped = traj_batch.value_col + (
+                            value_col - traj_batch.value_col
+                        ).clip(-config["CLIP_EPS"], config["CLIP_EPS"])
+                        value_col_losses = jnp.square(value_col - targets_col)
+                        value_col_losses_clipped = jnp.square(value_col_pred_clipped - targets_col)
+                        value_loss_col = (
+                            0.5 * jnp.maximum(value_col_losses, value_col_losses_clipped).mean()
+                        )
+                        
+                        value_loss = value_loss_ind + value_loss_col
 
-                        # CALCULATE ACTOR LOSS with COLLECTIVE advantages
+                        # CALCULATE ACTOR LOSS with COLLECTIVE advantages (from V_col)
                         ratio = jnp.exp(log_prob - traj_batch.log_prob)
 
-                        # Use pre-aligned collective advantages (already shuffled with same permutation)
+                        # Use collective advantages computed from V_col
                         if gae_collective is None:
                             gae_collective = gae
 
-                        # Normalize collective advantages (self-normalized)
+                        # Normalize collective advantages
                         gae_collective = (gae_collective - gae_collective.mean()) / (gae_collective.std() + 1e-8)
 
                         loss_actor1 = ratio * gae_collective
@@ -494,10 +646,13 @@ def make_train(config, pbar=None, csv_writer=None, tb_writer=None):
                         )
                         return total_loss, (value_loss, loss_actor, entropy)
 
+                    # Get collective targets for this minibatch (for training V_col)
+                    targets_col_batch = collective_targets_minibatch if collective_targets_minibatch is not None else targets
+                    
                     # Compute individual gradient
                     grad_fn = jax.value_and_grad(_loss_fn, has_aux=True)
                     (total_loss, aux), grads_individual = grad_fn(
-                            train_state.params, traj_batch, advantages, targets, network_used
+                            train_state.params, traj_batch, advantages, targets, targets_col_batch, network_used
                         )
 
                     # Apply FCGrad if enabled
@@ -509,17 +664,15 @@ def make_train(config, pbar=None, csv_writer=None, tb_writer=None):
                         individual_return = jnp.mean(targets)
 
                         # Collective return: mean of collective targets for this minibatch
-                        # FIXED: Now uses aligned minibatch data instead of full unshuffled data
                         if collective_targets_minibatch is not None:
                             collective_return = jnp.mean(collective_targets_minibatch)
                         else:
                             collective_return = jnp.mean(targets)
 
-                        # Compute collective gradient
-                        # FIXED: Pass pre-aligned collective advantages for this minibatch
+                        # Compute collective gradient using V_col advantages
                         grad_fn_collective = jax.value_and_grad(_collective_loss_fn, has_aux=True)
                         (collective_loss, _), grads_collective = grad_fn_collective(
-                            train_state.params, traj_batch, advantages, targets, network_used,
+                            train_state.params, traj_batch, advantages, targets, targets_col_batch, network_used,
                             gae_collective=collective_advantages_minibatch
                         )
 
@@ -551,15 +704,21 @@ def make_train(config, pbar=None, csv_writer=None, tb_writer=None):
                         lambda x: x.reshape((batch_size,) + x.shape[2:]), batch
                     )
 
-                # FIXED: Compute collective advantages/targets BEFORE shuffling, then shuffle with SAME permutation
+                # Prepare collective advantages/targets from V_col (passed as all_advantages, all_targets_global)
+                # These are now proper V_col-based values, not averaged individual values
                 if config.get("FCGRAD", False) and all_advantages is not None:
-                    # Collective advantage = mean across all agents' advantages
-                    # all_advantages shape: [num_agents, num_steps, num_envs]
-                    collective_advantages = jnp.mean(all_advantages, axis=0)  # [num_steps, num_envs]
+                    # all_advantages = advantages_col, all_targets_global = targets_col
+                    # Shape: [num_agents, num_steps, num_envs] or [num_steps, num_envs] for param sharing
+                    if len(all_advantages.shape) == 3:
+                        # Non-parameter sharing: use agent i's collective advantages
+                        collective_advantages = all_advantages[i]  # [num_steps, num_envs]
+                        collective_targets = all_targets_global[i]
+                    else:
+                        # Parameter sharing: collective is already flat
+                        collective_advantages = all_advantages
+                        collective_targets = all_targets_global
+                    
                     collective_advantages = collective_advantages.reshape((batch_size,))
-
-                    # Collective targets = mean across all agents' targets
-                    collective_targets = jnp.mean(all_targets_global, axis=0)  # [num_steps, num_envs]
                     collective_targets = collective_targets.reshape((batch_size,))
 
                     # Shuffle with SAME permutation as individual data
@@ -616,8 +775,9 @@ def make_train(config, pbar=None, csv_writer=None, tb_writer=None):
 
             if config["PARAMETER_SHARING"]:
                 update_state = (train_state, traj_batch, advantages, targets, rng)
+                # Pass collective advantages/targets computed from V_col
                 update_state, loss_info = jax.lax.scan(
-                    lambda state, unused: _update_epoch(state, unused, 0, None, None), update_state, None, config["UPDATE_EPOCHS"]
+                    lambda state, unused: _update_epoch(state, unused, 0, advantages_col, targets_col), update_state, None, config["UPDATE_EPOCHS"]
                 )
                 train_state = update_state[0]
                 metric = traj_batch.info
@@ -627,8 +787,9 @@ def make_train(config, pbar=None, csv_writer=None, tb_writer=None):
                 metric = []
                 for i in range(env.num_agents):
                     update_state = (train_state[i], traj_batch[i], advantages[i], targets[i], rng)
+                    # Pass collective advantages/targets computed from V_col (same for all agents)
                     update_state, loss_info = jax.lax.scan(
-                        lambda state, unused: _update_epoch(state, unused, i, advantages, targets), update_state, None, config["UPDATE_EPOCHS"]
+                        lambda state, unused: _update_epoch(state, unused, i, advantages_col, targets_col), update_state, None, config["UPDATE_EPOCHS"]
                     )
                     update_state_dict.append(update_state)
                     train_state[i] = update_state[0]
@@ -852,26 +1013,25 @@ def evaluate(params, env, save_path, config, timestamp=None):
     path.mkdir(parents=True, exist_ok=True)
 
     for o_t in range(config["GIF_NUM_FRAMES"]):
-        # 获取所有智能体的观察
-        # print(o_t)
-        # 使用模型选择动作
+        # Get observations for all agents
         if config["PARAMETER_SHARING"]:
             obs_batch = jnp.stack([obs[a] for a in env.agents]).reshape(-1, *env.observation_space()[0].shape)
-            network = ActorCritic(action_dim=env.action_space().n, activation="relu")  # 使用与训练时相同的参数
-            pi, _ = network.apply(params, obs_batch)
+            network = ActorCritic(action_dim=env.action_space().n, activation="relu", use_collective_head=True)
+            net_out = network.apply(params, obs_batch)
+            pi = net_out[0]  # First output is always policy
             rng, _rng = jax.random.split(rng)
             actions = pi.sample(seed=_rng)
-            # 转换动作格式
             env_act = {k: v.squeeze() for k, v in unbatchify(
                 actions, env.agents, 1, env.num_agents
             ).items()}
         else:
             obs_batch = jnp.stack([obs[a] for a in env.agents])
             env_act = {}
-            network = [ActorCritic(action_dim=env.action_space().n, activation="relu") for _ in range(env.num_agents)]
+            network = [ActorCritic(action_dim=env.action_space().n, activation="relu", use_collective_head=True) for _ in range(env.num_agents)]
             for i in range(env.num_agents):
-                obs = jnp.expand_dims(obs_batch[i],axis=0)
-                pi, _ = network[i].apply(params[i], obs)
+                obs_i = jnp.expand_dims(obs_batch[i], axis=0)
+                net_out = network[i].apply(params[i], obs_i)
+                pi = net_out[0]  # First output is policy
                 rng, _rng = jax.random.split(rng)
                 single_action = pi.sample(seed=_rng)
                 env_act[env.agents[i]] = single_action
