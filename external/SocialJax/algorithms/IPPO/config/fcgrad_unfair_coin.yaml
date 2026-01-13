@@ -1,10 +1,15 @@
 # =============================================================================
-# FCGrad on Unfair Coin Game - Paper-faithful hyperparameters
+# FCGrad on Unfair Coin Game - Paper-faithful implementation
 # =============================================================================
 # FCGrad: Fair Conflict-aware Gradient Adjustment
-# Based on Kim & Sycara (CMU) paper
-# 
-# Key difference from IPPO baseline: FCGRAD: True
+# Paper: "Fair Cooperation in Mixed-Motive Games via Conflict-Aware Gradient Adjustment"
+# by Woojun Kim and Katia Sycara (Carnegie Mellon University)
+#
+# Architecture:
+# - Two value heads: V_ind (individual) and V_col (collective)
+# - V_ind trained on individual rewards
+# - V_col trained on collective rewards (mean of all agents)
+# - FCGrad adjusts gradients when individual and collective objectives conflict
 # =============================================================================
 
 # Learning rate (paper: 1e-4 with linear annealing)
@@ -44,10 +49,12 @@
 "NUM_SEEDS": 1
 "REWARD": "individual"
 "GIF_NUM_FRAMES": 250
-"PARAMETER_SHARING": False  # Paper uses separate networks per agent
+"PARAMETER_SHARING": True
 
 # FCGrad settings - ENABLED
-"FCGRAD": True
+"FCGRAD": True               # Enable FCGrad gradient adjustment
+"USE_DUAL_HEAD": True        # Use two value heads (V_ind + V_col)
+"FCGRAD_BETA": 0.5           # Paper: β=0.5 for Unfair Coin
 
 # WandB
 "ENTITY": ""
@@ -56,4 +63,3 @@
 "WANDB_TAGS":
   - FCGRAD
   - UNFAIR_COIN
-  - INDIVIDUAL_REWARD

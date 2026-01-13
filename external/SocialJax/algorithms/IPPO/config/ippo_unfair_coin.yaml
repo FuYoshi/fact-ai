@@ -5,7 +5,8 @@
 # - Green coin: 15/16 probability (0.9375)
 # - Red coin: 1/16 probability (0.0625)
 # - Individual rewards (no shared rewards)
-# - Single value head (IPPO, not MAPPO)
+# - Two value heads (V_ind + V_col) for paper-faithful architecture
+#   (even Individual baseline uses same backbone for fair comparison)
 # =============================================================================
 
 # Learning rate (paper: 1e-4 with linear annealing)
@@ -47,9 +48,10 @@
 "GIF_NUM_FRAMES": 250
 "PARAMETER_SHARING": True   # Shared network, agent ID encoded
 
-# FCGrad settings
+# FCGrad settings (paper-faithful two-head architecture)
 "FCGRAD": False              # Enable FCGrad gradient adjustment
-"FCGRAD_COLLECTIVE_WEIGHT": 1.0  # Weight for collective objective gradient
+"USE_DUAL_HEAD": True        # Use two value heads (V_ind + V_col) - paper architecture
+"FCGRAD_BETA": 0.5           # Paper: β=0.5 for Unfair Coin (balances ind/col objectives)
 
 # WandB
 "ENTITY": ""
