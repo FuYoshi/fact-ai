@@ -1,0 +1,61 @@
+# =============================================================================
+# IPPO Baseline on Unfair Coin Game - Paper-faithful hyperparameters
+# =============================================================================
+# This is the CORRECT baseline setup per the FCGrad paper:
+# - Green coin: 15/16 probability (0.9375)
+# - Red coin: 1/16 probability (0.0625)
+# - Individual rewards (no shared rewards)
+# - Single value head (IPPO, not MAPPO)
+# =============================================================================
+
+# Learning rate (paper: 1e-4 with linear annealing)
+"LR": 0.0001
+"ANNEAL_LR": True
+
+# PPO hyperparameters (from paper Appendix B)
+"NUM_ENVS": 256
+"NUM_STEPS": 1000
+"TOTAL_TIMESTEPS": 1e9
+"UPDATE_EPOCHS": 2
+"NUM_MINIBATCHES": 500
+"GAMMA": 0.99
+"GAE_LAMBDA": 0.95
+"CLIP_EPS": 0.2
+"ENT_COEF": 0.1      # Paper: 0.1 (not 0.01!)
+"VF_COEF": 0.1       # Paper: 0.1 (not 0.5!)
+"MAX_GRAD_NORM": 0.5
+"ACTIVATION": "relu"
+
+# Environment
+"ENV_NAME": "coin_game"
+"ENV_KWARGS": 
+  "num_agents": 2
+  "num_inner_steps": 1000
+  "shared_rewards": False     # CRITICAL: Individual rewards only
+  "green_coin_prob": 0.9375   # UNFAIR: 15/16 green, 1/16 red
+  "cnn": True
+  "jit": True
+
+# Reward shaping (not used in baseline, but keep for compatibility)
+"REW_SHAPING_HORIZON": 2.5e6
+"SHAPING_BEGIN": 1e6
+
+# Training
+"SEED": 42
+"NUM_SEEDS": 1  # Paper uses 4 seeds for final results
+"REWARD": "individual"
+"GIF_NUM_FRAMES": 250
+"PARAMETER_SHARING": True   # Shared network, agent ID encoded
+
+# FCGrad settings
+"FCGRAD": False              # Enable FCGrad gradient adjustment
+"FCGRAD_COLLECTIVE_WEIGHT": 1.0  # Weight for collective objective gradient
+
+# WandB
+"ENTITY": ""
+"PROJECT": "fcgrad-unfair-coin"
+"WANDB_MODE": "offline"
+"WANDB_TAGS":
+  - IPPO_BASELINE
+  - UNFAIR_COIN
+  - INDIVIDUAL_REWARD

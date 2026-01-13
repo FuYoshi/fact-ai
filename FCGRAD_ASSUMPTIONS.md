@@ -1,6 +1,6 @@
 # FCGrad Implementation
 
-## Matches Paper ✅
+## Matches Paper
 - Separate networks per agent
 - Lower return = disadvantaged = prioritized
 - Collective return = mean of all agents' TD(λ) targets
