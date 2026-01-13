@@ -1,5 +1,8 @@
 """
-FCGrad - Main entry point for running IPPO baseline from SocialJax
+FCGrad - Main entry point for running IPPO/FCGrad from SocialJax
+
+FCGrad: Fair Conflict-aware Gradient Adjustment
+Based on Kim & Sycara (CMU) paper
 """
 import sys
 import os
@@ -10,12 +13,14 @@ socialjax_path = os.path.join(os.path.dirname(__file__), 'external', 'SocialJax'
 if os.path.exists(socialjax_path):
     sys.path.insert(0, socialjax_path)
 
-# Get IPPO directory path
+# Also add IPPO directory for fcgrad_utils import
 ippo_dir = os.path.join(socialjax_path, 'algorithms', 'IPPO')
+if os.path.exists(ippo_dir):
+    sys.path.insert(0, ippo_dir)
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Run IPPO baseline from SocialJax')
+    parser = argparse.ArgumentParser(description='Run IPPO/FCGrad from SocialJax')
     parser.add_argument(
         '--env',
         type=str,
@@ -29,7 +34,7 @@ def main():
         '--config',
         type=str,
         default=None,
-        help='Custom config name (e.g., ippo_cnn_coins_sanity for sanity check)'
+        help='Custom config name (e.g., ippo_unfair_coin, fcgrad_unfair_coin)'
     )
     parser.add_argument(
         '--total-timesteps',
@@ -42,6 +47,11 @@ def main():
         type=int,
         default=None,
         help='Random seed'
+    )
+    parser.add_argument(
+        '--fcgrad',
+        action='store_true',
+        help='Enable FCGrad gradient adjustment (overrides config)'
     )
     parser.add_argument(
         '--tune',
@@ -75,7 +85,8 @@ def main():
     else:
         config_name = script_name
     
-    print(f"Running IPPO baseline: {script_name}")
+    algo_name = "FCGrad" if args.fcgrad else "IPPO"
+    print(f"Running {algo_name}: {script_name}")
     print(f"Config: {config_name}")
     print(f"Working directory: {os.getcwd()}")
     print()
@@ -119,11 +130,13 @@ def main():
                 cfg['SEED'] = args.seed
             if args.tune:
                 cfg['TUNE'] = True
+            if args.fcgrad:
+                cfg['FCGRAD'] = True
             # Override WANDB_MODE from environment variable if set
             if 'WANDB_MODE' in os.environ:
                 cfg['WANDB_MODE'] = os.environ['WANDB_MODE']
             
-            # Run the IPPO training
+            # Run the training
             if cfg.get('TUNE', False):
                 script_module.tune(cfg)
             else:

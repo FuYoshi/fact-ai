@@ -17,3 +17,4 @@ wandb: W&B syncing is set to `offline` in this directory.
 wandb: Run `wandb online` or set WANDB_MODE=online to enable cloud syncing.
 /home/scur0012/.venvs/fcgrad/lib/python3.12/site-packages/jax/_src/ops/scatter.py:96: FutureWarning: scatter inputs have incompatible types: cannot safely cast value from dtype=int32 to dtype=int16 with jax_numpy_dtype_promotion='standard'. In future JAX releases this will result in an error.
   warnings.warn(
+[2026-01-12T21:53:12.141] error: *** JOB 18261574 ON gcn5 CANCELLED AT 2026-01-12T21:53:12 DUE TO TIME LIMIT ***
