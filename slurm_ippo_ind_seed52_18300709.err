@@ -1,7 +1,0 @@
-wandb: Tracking run with wandb version 0.23.1
-wandb: W&B syncing is set to `offline` in this directory. Run `wandb online` or set WANDB_MODE=online to enable cloud syncing.
-wandb: Run data is saved locally in /gpfs/home1/scur0012/simon/fact_fcgrad/wandb/offline-run-20260113_183108-iws11679
-/home/scur0012/.venvs/fcgrad/lib/python3.12/site-packages/jax/_src/ops/scatter.py:96: FutureWarning: scatter inputs have incompatible types: cannot safely cast value from dtype=int32 to dtype=int16 with jax_numpy_dtype_promotion='standard'. In future JAX releases this will result in an error.
-  warnings.warn(
-/home/scur0012/.venvs/fcgrad/lib/python3.12/site-packages/jax/_src/ops/scatter.py:96: FutureWarning: scatter inputs have incompatible types: cannot safely cast value from dtype=int32 to dtype=int16 with jax_numpy_dtype_promotion='standard'. In future JAX releases this will result in an error.
-  warnings.warn(

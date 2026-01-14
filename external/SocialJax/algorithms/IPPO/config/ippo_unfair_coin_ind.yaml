@@ -1,15 +1,14 @@
 # =============================================================================
-# FCGrad on Unfair Coin Game - Paper-faithful implementation
+# IPPO Baseline on Unfair Coin Game - Paper experiment
 # =============================================================================
-# FCGrad: Fair Conflict-aware Gradient Adjustment
+# Baseline IPPO (without FCGrad) for the Unfair Coin Game experiment
 # Paper: "Fair Cooperation in Mixed-Motive Games via Conflict-Aware Gradient Adjustment"
 # by Woojun Kim and Katia Sycara (Carnegie Mellon University)
 #
-# Architecture:
-# - Two value heads: V_ind (individual) and V_col (collective)
-# - V_ind trained on individual rewards
-# - V_col trained on collective rewards (mean of all agents)
-# - FCGrad adjusts gradients when individual and collective objectives conflict
+# This config matches the baseline experiment in the paper:
+# - Unfair Coin Game: green_coin_prob = 0.9375 (15/16 green, 1/16 red)
+# - Individual rewards (shared_rewards: False)
+# - Standard IPPO without FCGrad gradient adjustment
 # =============================================================================
 
 # Learning rate (paper: 1e-4 with linear annealing)
@@ -30,13 +29,13 @@
 "MAX_GRAD_NORM": 0.5
 "ACTIVATION": "relu"
 
-# Environment
+# Environment - Unfair Coin Game
 "ENV_NAME": "coin_game"
 "ENV_KWARGS": 
   "num_agents": 2
   "num_inner_steps": 1000
   "shared_rewards": False     # CRITICAL: Individual rewards only
-  "green_coin_prob": 0.9375   # UNFAIR: 15/16 green, 1/16 red
+  "green_coin_prob": 0.9375   # UNFAIR: 15/16 green, 1/16 red (paper setting)
   "cnn": True
   "jit": True
 
@@ -51,15 +50,17 @@
 "GIF_NUM_FRAMES": 250
 "PARAMETER_SHARING": True
 
-# FCGrad settings - ENABLED
-"FCGRAD": True               # Enable FCGrad gradient adjustment
-"USE_DUAL_HEAD": True        # Use two value heads (V_ind + V_col)
-"FCGRAD_BETA": 0.5           # Paper: β=0.5 for Unfair Coin
+# FCGrad settings - DISABLED (this is the baseline)
+"FCGRAD": False              # Baseline IPPO without FCGrad
+"USE_DUAL_HEAD": False       # Single value head (standard IPPO)
+"FCGRAD_BETA": 0.5           # Not used when FCGRAD=False
 
 # WandB
 "ENTITY": ""
-"PROJECT": "fcgrad-unfair-coin"
-"WANDB_MODE": "offline"
+"PROJECT": "ippo-unfair-coin"
+"WANDB_MODE": "online"
 "WANDB_TAGS":
-  - FCGRAD
+  - IPPO
+  - BASELINE
   - UNFAIR_COIN
+  - INDIVIDUAL_REWARD
