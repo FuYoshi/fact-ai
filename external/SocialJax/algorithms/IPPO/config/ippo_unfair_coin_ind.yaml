@@ -49,6 +49,7 @@
 "REWARD": "individual"
 "GIF_NUM_FRAMES": 250
 "PARAMETER_SHARING": True
+"TUNE": False            # Set to True for hyperparameter sweep
 
 # FCGrad settings - DISABLED (this is the baseline)
 "FCGRAD": False              # Baseline IPPO without FCGrad
@@ -57,7 +58,7 @@
 
 # WandB
 "ENTITY": ""
-"PROJECT": "ippo-unfair-coin"
+"PROJECT": "ippo-unfair-coin-test"
 "WANDB_MODE": "online"
 "WANDB_TAGS":
   - IPPO

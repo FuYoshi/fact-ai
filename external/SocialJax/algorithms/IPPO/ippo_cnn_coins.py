@@ -2,7 +2,11 @@
 Based on PureJaxRL & jaxmarl Implementation of PPO
 """
 import sys
-sys.path.append('/home/shuqing/SocialJax')
+import os
+# Add SocialJax to path (relative to this file's location)
+current_dir = os.path.dirname(os.path.abspath(__file__))
+socialjax_path = os.path.join(current_dir, '..', '..')
+sys.path.insert(0, os.path.abspath(socialjax_path))
 import jax
 import jax.numpy as jnp
 import flax.linen as nn

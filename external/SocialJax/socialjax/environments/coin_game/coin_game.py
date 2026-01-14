@@ -170,6 +170,7 @@ class CoinGame(MultiAgentEnv):
         svo_target_agents=None,
         svo_w=0.5,
         svo_ideal_angle_degrees=45,
+        green_coin_prob=0.5,  # Probability of spawning green coin (default 50/50)
         jit=True,
         
         grid_size=(16,11),
@@ -215,6 +216,7 @@ class CoinGame(MultiAgentEnv):
         self.svo_target_agents = svo_target_agents
         self.svo_w = svo_w
         self.svo_ideal_angle_degrees = svo_ideal_angle_degrees
+        self.green_coin_prob = green_coin_prob
         self.smooth_rewards = enable_smooth_rewards
 
         self.PLAYER_COLOURS = generate_agent_colors(num_agents)
@@ -739,28 +741,29 @@ class CoinGame(MultiAgentEnv):
             #     actions
             # )
             key, subkey = jax.random.split(key)
-            # regrow apple
+            # regrow apple with unfair probability based on green_coin_prob
             grid_apple = state.grid
             probability = self.regrow_rate
-            def regrow_green_apple(apple_locs, p):
-                new_apple = jnp.where((((grid_apple[apple_locs[0], apple_locs[1]] == Items.empty) & (p < probability)) 
-                                       | ((grid_apple[apple_locs[0], apple_locs[1]] == Items.green_apple))),  
-                                      Items.green_apple, grid_apple[apple_locs[0], apple_locs[1]])
+            def regrow_apple(apple_locs, p_regrow, p_color):
+                current_cell = grid_apple[apple_locs[0], apple_locs[1]]
+                # Check if position is empty and should regrow
+                should_regrow = (current_cell == Items.empty) & (p_regrow < probability)
+                # If regrowing, decide color based on green_coin_prob
+                new_apple_type = jnp.where(
+                    p_color < self.green_coin_prob,
+                    Items.green_apple,
+                    Items.red_apple
+                )
+                # Keep existing apple if present, otherwise regrow with chosen type
+                new_apple = jnp.where(
+                    should_regrow,
+                    new_apple_type,
+                    current_cell
+                )
                 return new_apple
-            prob = jax.random.uniform(key, shape=(len(self.SPAWNS_APPLE),))
-            new_apple = jax.vmap(regrow_green_apple)(self.SPAWNS_APPLE, prob)
-            new_apple_grid = grid_apple.at[self.SPAWNS_APPLE[:, 0], self.SPAWNS_APPLE[:, 1]].set(new_apple[:])
-            state = state.replace(grid=new_apple_grid)
-
-
-            grid_apple = state.grid
-            def regrow_red_apple(apple_locs, p):
-                new_apple = jnp.where((((grid_apple[apple_locs[0], apple_locs[1]] == Items.empty) & (p < probability)) 
-                                       | ((grid_apple[apple_locs[0], apple_locs[1]] == Items.red_apple))),  
-                                      Items.red_apple, grid_apple[apple_locs[0], apple_locs[1]])
-                return new_apple
-            prob = jax.random.uniform(subkey, shape=(len(self.SPAWNS_APPLE),))
-            new_apple = jax.vmap(regrow_red_apple)(self.SPAWNS_APPLE, prob)
+            prob_regrow = jax.random.uniform(key, shape=(len(self.SPAWNS_APPLE),))
+            prob_color = jax.random.uniform(subkey, shape=(len(self.SPAWNS_APPLE),))
+            new_apple = jax.vmap(regrow_apple)(self.SPAWNS_APPLE, prob_regrow, prob_color)
             new_apple_grid = grid_apple.at[self.SPAWNS_APPLE[:, 0], self.SPAWNS_APPLE[:, 1]].set(new_apple[:])
             state = state.replace(grid=new_apple_grid)
 
@@ -924,7 +927,7 @@ class CoinGame(MultiAgentEnv):
                 rewards_mean_all_agents += rewards_mean
                 rewards = rewards_mean_all_agents
                 info = {
-                    "original_rewards": indiv_rewards.squeeze()
+                    "original_rewards": indiv_rewards.squeeze(),
                     "shaped_rewards": rewards.squeeze(),
                 }
             elif self.inequity_aversion:
