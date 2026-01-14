@@ -31,9 +31,6 @@
 "GIF_NUM_FRAMES": 250
 "PARAMETER_SHARING": True
 
-# FCGrad settings (disabled by default for baseline)
-"FCGRAD": False
-
 # WandB Params
 "ENTITY": ""
 "PROJECT": "socialjax"

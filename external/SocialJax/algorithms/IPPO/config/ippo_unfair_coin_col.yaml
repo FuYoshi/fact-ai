@@ -1,13 +1,22 @@
 # =============================================================================
-# IPPO Baseline (COLLECTIVE) on Unfair Coin Game
+# IPPO Baseline on Unfair Coin Game - Collective Rewards
 # =============================================================================
-# Col baseline: All agents share the collective reward
-# shared_rewards: True means all agents get the same (averaged) reward
+# Baseline IPPO (without FCGrad) for the Unfair Coin Game experiment
+# Paper: "Fair Cooperation in Mixed-Motive Games via Conflict-Aware Gradient Adjustment"
+# by Woojun Kim and Katia Sycara (Carnegie Mellon University)
+#
+# This config matches the baseline experiment with collective rewards:
+# - Unfair Coin Game: green_coin_prob = 0.9375 (15/16 green, 1/16 red)
+# - Collective rewards (shared_rewards: True) - uses MEAN per paper definition
+#   Collective return = average of individual returns (R_col = 1/N * sum(R^i))
+# - Standard IPPO without FCGrad gradient adjustment
 # =============================================================================
 
+# Learning rate (paper: 1e-4 with linear annealing)
 "LR": 0.0001
 "ANNEAL_LR": True
 
+# PPO hyperparameters (from paper Appendix B)
 "NUM_ENVS": 256
 "NUM_STEPS": 1000
 "TOTAL_TIMESTEPS": 1e9
@@ -16,35 +25,43 @@
 "GAMMA": 0.99
 "GAE_LAMBDA": 0.95
 "CLIP_EPS": 0.2
-"ENT_COEF": 0.1
-"VF_COEF": 0.1
+"ENT_COEF": 0.1      # Paper: 0.1
+"VF_COEF": 0.1       # Paper: 0.1
 "MAX_GRAD_NORM": 0.5
 "ACTIVATION": "relu"
 
+# Environment - Unfair Coin Game
 "ENV_NAME": "coin_game"
 "ENV_KWARGS": 
   "num_agents": 2
   "num_inner_steps": 1000
-  "shared_rewards": True      # COLLECTIVE: All agents share reward
-  "green_coin_prob": 0.9375
+  "shared_rewards": True      # CRITICAL: Collective rewards (mean of individual)
+  "green_coin_prob": 0.9375   # UNFAIR: 15/16 green, 1/16 red (paper setting)
   "cnn": True
   "jit": True
 
+# Reward shaping (not used, but keep for compatibility)
 "REW_SHAPING_HORIZON": 2.5e6
 "SHAPING_BEGIN": 1e6
 
+# Training
 "SEED": 42
 "NUM_SEEDS": 1
-"REWARD": "collective"
+"REWARD": "common"           # Collective/common rewards
 "GIF_NUM_FRAMES": 250
 "PARAMETER_SHARING": True
 
-"FCGRAD": False
+# FCGrad settings - DISABLED (this is the baseline)
+"FCGRAD": False              # Baseline IPPO without FCGrad
+"USE_DUAL_HEAD": False       # Single value head (standard IPPO)
+"FCGRAD_BETA": 0.5           # Not used when FCGRAD=False
 
+# WandB
 "ENTITY": ""
-"PROJECT": "fcgrad-unfair-coin"
-"WANDB_MODE": "offline"
+"PROJECT": "ippo-unfair-coin"
+"WANDB_MODE": "online"
 "WANDB_TAGS":
-  - IPPO_COLLECTIVE
+  - IPPO
+  - BASELINE
   - UNFAIR_COIN
-  - SHARED_REWARD
+  - COMMON_REWARD
