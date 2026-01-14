@@ -1,0 +1,60 @@
+# =============================================================================
+# QUICK TEST CONFIG - IPPO Baseline on Unfair Coin Game
+# =============================================================================
+# Quick test version with reduced timesteps for wandb testing
+# =============================================================================
+
+# Learning rate
+"LR": 0.0001
+"ANNEAL_LR": False  # Disable annealing for quick test
+
+# PPO hyperparameters - REDUCED for quick test
+"NUM_ENVS": 64          # Reduced from 256
+"NUM_STEPS": 128        # Reduced from 1000
+"TOTAL_TIMESTEPS": 1e6  # Reduced from 1e9 (1M instead of 1B)
+"UPDATE_EPOCHS": 2
+"NUM_MINIBATCHES": 4    # Reduced from 500
+"GAMMA": 0.99
+"GAE_LAMBDA": 0.95
+"CLIP_EPS": 0.2
+"ENT_COEF": 0.1
+"VF_COEF": 0.1
+"MAX_GRAD_NORM": 0.5
+"ACTIVATION": "relu"
+
+# Environment - Unfair Coin Game
+"ENV_NAME": "coin_game"
+"ENV_KWARGS": 
+  "num_agents": 2
+  "num_inner_steps": 1000
+  "shared_rewards": False     # Individual rewards
+  "green_coin_prob": 0.9375   # Unfair: 15/16 green, 1/16 red
+  "cnn": True
+  "jit": True
+
+# Reward shaping (not used)
+"REW_SHAPING_HORIZON": 2.5e6
+"SHAPING_BEGIN": 1e6
+
+# Training
+"SEED": 42
+"NUM_SEEDS": 1
+"REWARD": "individual"
+"GIF_NUM_FRAMES": 50    # Reduced from 250
+"PARAMETER_SHARING": True
+"TUNE": False            # Set to True for hyperparameter sweep
+
+# FCGrad settings - DISABLED
+"FCGRAD": False
+"USE_DUAL_HEAD": False
+"FCGRAD_BETA": 0.5
+
+# WandB
+"ENTITY": ""
+"PROJECT": "ippo-unfair-coin-test"
+"WANDB_MODE": "online"
+"WANDB_TAGS":
+  - IPPO
+  - TEST
+  - QUICK
+  - INDIVIDUAL_REWARD

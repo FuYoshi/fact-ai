@@ -58,7 +58,7 @@
 
 # WandB
 "ENTITY": ""
-"PROJECT": "ippo-unfair-coin"
+"PROJECT": "ippo-unfair-coin-test"
 "WANDB_MODE": "online"
 "WANDB_TAGS":
   - IPPO
