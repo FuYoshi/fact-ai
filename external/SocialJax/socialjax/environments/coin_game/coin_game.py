@@ -924,7 +924,7 @@ class CoinGame(MultiAgentEnv):
                 rewards_mean_all_agents += rewards_mean
                 rewards = rewards_mean_all_agents
                 info = {
-                    "original_rewards": rewards.squeeze(),
+                    "original_rewards": indiv_rewards.squeeze()
                     "shaped_rewards": rewards.squeeze(),
                 }
             elif self.inequity_aversion:
