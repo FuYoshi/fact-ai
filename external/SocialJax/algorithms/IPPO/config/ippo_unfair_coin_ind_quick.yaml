@@ -5,15 +5,15 @@
 # =============================================================================
 
 # Learning rate
-"LR": 0.0001
-"ANNEAL_LR": False  # Disable annealing for quick test
+"LR": 0.0005
+"ANNEAL_LR": True  # Disable annealing for quick test
 
 # PPO hyperparameters - REDUCED for quick test
-"NUM_ENVS": 64          # Reduced from 256
+"NUM_ENVS": 256          # Reduced from 256
 "NUM_STEPS": 128        # Reduced from 1000
-"TOTAL_TIMESTEPS": 1e6  # Reduced from 1e9 (1M instead of 1B)
-"UPDATE_EPOCHS": 2
-"NUM_MINIBATCHES": 4    # Reduced from 500
+"TOTAL_TIMESTEPS": 1e8  # Reduced from 1e9 (1M instead of 1B)
+"UPDATE_EPOCHS": 4
+"NUM_MINIBATCHES": 32    # Reduced from 500
 "GAMMA": 0.99
 "GAE_LAMBDA": 0.95
 "CLIP_EPS": 0.2
