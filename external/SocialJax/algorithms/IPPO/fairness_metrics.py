@@ -96,7 +96,9 @@ def compute_fairness_metrics(returns):
     # Paper assumes r_i > 0, but we handle negatives by shifting
     min_ret = jnp.min(returns)
     eps = 1e-6
-    shifted_returns = returns - min_ret + eps
+    # Only shift if there are negative values, otherwise use returns directly (with small eps to avoid log(0))
+    has_negatives = min_ret < 0
+    shifted_returns = jnp.where(has_negatives, returns - min_ret + eps, jnp.maximum(returns, eps))
     geomean_return = jnp.exp(jnp.mean(jnp.log(shifted_returns)))
     
     # Minimum return (α→∞): min_i(r_i)
