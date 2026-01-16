@@ -352,11 +352,13 @@ def make_train(config, pbar=None):
             else:
                 last_obs_batch = jnp.transpose(last_obs,(1,0,2,3,4))
                 last_val_ind = []
+                last_val_col = []
                 for i in range(env.num_agents):
-                    _, last_val_i, _ = network[i].apply(train_state[i].params, last_obs_batch[i])
+                    _, last_val_i, last_val_c = network[i].apply(train_state[i].params, last_obs_batch[i])
                     last_val_ind.append(last_val_i)
+                    last_val_col.append(last_val_c)
                 last_val_ind = jnp.stack(last_val_ind, axis=0)
-                last_val_col = last_val_ind  # Not used
+                last_val_col = jnp.stack(last_val_col, axis=0)
 
             def _calculate_gae(traj_batch, values):
                 def _get_advantages(gae_and_next_value, transition):
@@ -391,14 +393,20 @@ def make_train(config, pbar=None):
                 advantages_col, targets_col = _calculate_gae(traj_batch, last_val_col)
             else:
                 advantages_ind = []
+                advantages_col = []
                 targets_ind = []
+                targets_col = []
                 for i in range(env.num_agents):
                     advantages_i, targets_i = _calculate_gae(traj_batch[i], last_val_ind[i])
+                    advantages_c, targets_c = _calculate_gae(traj_batch[i], last_val_col[i])
                     advantages_ind.append(advantages_i)
+                    advantages_col.append(advantages_c)
                     targets_ind.append(targets_i)
+                    targets_col.append(targets_c)
                 advantages_ind = jnp.stack(advantages_ind, axis=0)
+                advantages_col = jnp.stack(advantages_col, axis=0)
                 targets_ind = jnp.stack(targets_ind, axis=0)
-                advantages_col, targets_col = advantages_ind, targets_ind  # Not used
+                targets_col = jnp.stack(targets_col, axis=0)
 
             # UPDATE NETWORK
             def _update_epoch(update_state, unused, i):
