@@ -425,7 +425,7 @@ def make_train(config, pbar=None):
                             config["FCGRAD_BETA"],
                             network_used
                         )
-                        # TODO: what is total_loss for FCGrad???
+                        # TODO: compute value_loss and also update value networks.
                         total_loss = 0.0  # Placeholder
                     else:
                         def _loss_fn(params, traj_batch, gae, targets, network_used):
@@ -467,7 +467,6 @@ def make_train(config, pbar=None):
 
                         grad_fn = jax.value_and_grad(_loss_fn, has_aux=True)
                         total_loss, grads = grad_fn(train_state.params, traj_batch, adv_ind, targets_ind, network_used)
-                        print(grads)
                     train_state = train_state.apply_gradients(grads=grads)
                     return train_state, total_loss
 
