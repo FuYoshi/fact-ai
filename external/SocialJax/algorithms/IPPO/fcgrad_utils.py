@@ -179,8 +179,8 @@ def compute_fcgrad(
     traj_batch: PyTree,
     adv_ind: jnp.ndarray,
     adv_col: jnp.ndarray,
-    val_ind: jnp.ndarray,
-    val_col: jnp.ndarray,
+    targets_ind: jnp.ndarray,
+    targets_col: jnp.ndarray,
     clip_eps: float,
     beta: float,
     network_used,
@@ -194,8 +194,8 @@ def compute_fcgrad(
         traj_batch (Transition): pytree of trajectory data.
         adv_ind (jnp.ndarray): individual advantages. [B]
         adv_col (jnp.ndarray): collective advantages. [B]
-        val_ind (jnp.ndarray): values of individual objective per agent per environment. [B]
-        val_col (jnp.ndarray): values of collective objective per agent per environment. [B]
+        targets_ind (jnp.ndarray): individual targets. [B]
+        targets_col (jnp.ndarray): collective targets. [B]
         clip_eps (float): epsilon parameter for PPO clipping.
         beta (float): beta parameter for beta weighting in FCGrad.
         network_used: network used to compute policy loss from.
@@ -207,18 +207,18 @@ def compute_fcgrad(
     # Compute the gradient using the adavantages.
     grad_fn = jax.value_and_grad(policy_loss)
 
-    # Compute per-parameter gradients over batch (already averaged in policy_loss)
+    # Compute policy gradients over batch (already averaged in policy_loss)
     loss_ind, g_ind = grad_fn(params, traj_batch, adv_ind, clip_eps, network_used)
     loss_col, g_col = grad_fn(params, traj_batch, adv_col, clip_eps, network_used)
 
-    # Apply FCGrad per agent (vmap over val_ind/val_col)
-    grads_per_agent = jax.vmap(fcgrad_adjust, (None, None, 0, 0, None))
-    agent_grads = grads_per_agent(g_ind, g_col, val_ind, val_col, beta)
+    # TODO:
+    val_ind = ...
+    val_col = ...
 
-    # Aggregate gradients across agents
-    grads = jax.tree_map(lambda x: jnp.mean(x, axis=0), agent_grads)
+    g_policy = fcgrad_adjust(g_ind, g_col, val_ind, val_col, beta)
 
-    return grads
+    # Maybe return policy loss for logging?
+    return g_policy
 
 
 # ===================================================
