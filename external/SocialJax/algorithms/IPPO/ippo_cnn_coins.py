@@ -414,7 +414,7 @@ def make_train(config, pbar=None):
                     traj_batch, adv_ind, targets_ind, adv_col, targets_col = batch_info
 
                     if config["FCGRAD"]:
-                        grads = compute_fcgrad(
+                        grads, total_loss = compute_fcgrad(
                             train_state.params,
                             traj_batch,
                             adv_ind,
@@ -425,8 +425,6 @@ def make_train(config, pbar=None):
                             config["FCGRAD_BETA"],
                             network_used
                         )
-                        # TODO: compute value_loss and also update value networks.
-                        total_loss = 0.0  # Placeholder
                     else:
                         def _loss_fn(params, traj_batch, gae, targets, network_used):
                             # RERUN NETWORK
