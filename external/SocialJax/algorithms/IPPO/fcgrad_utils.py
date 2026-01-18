@@ -31,7 +31,7 @@ def beta_weighting(g_ind: PyTree, g_col: PyTree, beta: float = 0.5) -> PyTree:
         (PyTree): beta weighted components.
     """
     assert 0 <= beta <= 1, "beta must be in [0, 1]"
-    return jax.tree_map(lambda gi, gc: beta * gi + (1 - beta) * gc, g_ind, g_col)
+    return jax.tree_map(lambda gi, gc: (1 - beta) * gi + beta * gc, g_ind, g_col)
 
 
 def pytree_dot(g_ind: PyTree, g_col: PyTree) -> jnp.ndarray:
@@ -91,6 +91,26 @@ def collective_disadvantaged(val_ind: jnp.ndarray, val_col: jnp.ndarray) -> jnp.
     return val_col < val_ind
 
 
+def pytree_allclose(pytree, value, atol=1e-8, rtol=1e-5):
+    """Check if all leaves in pytree are close to value using
+    absolute and relative tolerance.
+
+    Args:
+        pytree (PyTree): pytree to check.
+        value (float): value to check for
+        atol (float): absolute tolerance.
+        atol (float): relative tolerance.
+
+    Returns:
+        True if all leaves are close to value, False otherwise.
+    """
+    leaf_checks = jax.tree_map(
+        lambda x: jnp.all(jnp.isclose(x, value, atol=atol, rtol=rtol)), pytree
+    )
+    return jax.tree_util.tree_reduce(lambda a, b: a & b, leaf_checks)
+
+
+
 def fcgrad_adjust(
     g_ind: PyTree,
     g_col: PyTree,
@@ -127,10 +147,20 @@ def fcgrad_adjust(
     Returns:
         (PyTree): pytree with adjusted gradients.
     """
-
     def aligned(_):
-        # TODO: if g_col is zero, should we just return g_ind?
         return beta_weighting(g_ind, g_col, beta)
+        # TODO: if g_ind (g_col) is zero, then use g_col (g_ind). Does not early stop
+        # return jax.lax.cond(
+        #     pytree_allclose(g_col, 0.0),
+        #     lambda _: g_ind,
+        #     lambda _: jax.lax.cond(
+        #         pytree_allclose(g_ind, 0.0),
+        #         lambda _: g_col,
+        #         lambda _: beta_weighting(g_ind, g_col, beta),
+        #         operand=None,
+        #     ),
+        #     operand=None,
+        # )
 
     def conflict(_):
         return jax.lax.cond(
@@ -296,7 +326,7 @@ def compute_fcgrad_jacobian(
     g_actor_per_sample = grads_fn(g_actor_ind, g_actor_col, val_ind, val_col, beta)
 
     # Aggregate actor gradients by taking the mean.
-    g_actor = jax.tree_map(lambda x: jnp.mean(jnp.stack(x), axis=0), g_actor_per_sample)
+    g_actor = jax.tree_map(lambda x: jnp.mean(x, axis=0), g_actor_per_sample)
 
     grads = jax.tree_map(lambda a, b, c: a + b + c, g_actor, g_critic_ind, g_critic_col)
     return grads, total_loss
@@ -412,7 +442,7 @@ def compute_fcgrad(
     g_actor_per_sample = grads_fn(g_ind, g_col, v_ind, v_col, beta)
 
     # Aggregate actor gradients by taking the mean.
-    g_actor = jax.tree_map(lambda x: jnp.mean(jnp.stack(x), axis=0), g_actor_per_sample)
+    g_actor = jax.tree_map(lambda x: jnp.mean(x, axis=0), g_actor_per_sample)
 
     # Critic gradients/loss
     critic_grad_fn = jax.value_and_grad(value_loss)
@@ -546,8 +576,8 @@ def test_grad_col_zero():
     result = fcgrad_adjust(g_ind, g_col, val_ind=1.0, val_col=2.0, beta=beta)
 
     assert jnp.allclose(
-        result["w"], (1 - beta) * g_ind["w"]
-    ), f"Expected (1 - beta) * g_ind['w'], got {result['w']}"
+        result["w"], g_ind["w"]
+    ), f"Expected g_ind['w'], got {result['w']}"
 
 
 if __name__ == "__main__":
