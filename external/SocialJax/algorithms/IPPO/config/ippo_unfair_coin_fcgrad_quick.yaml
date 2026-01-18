@@ -34,7 +34,7 @@
 "ENV_KWARGS":
   "num_agents": 2
   "num_inner_steps": 1000
-  "shared_rewards": False     # CRITICAL: Individual rewards only
+  "shared_rewards": True
   "green_coin_prob": 0.9375   # UNFAIR: 15/16 green, 1/16 red (paper setting)
   "cnn": True
   "jit": True
