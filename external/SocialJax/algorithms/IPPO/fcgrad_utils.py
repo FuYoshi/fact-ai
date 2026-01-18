@@ -419,7 +419,7 @@ def compute_fcgrad(
     loss_critic_ind, g_critic_ind = critic_grad_fn(params, traj_batch, targets_ind, clip_eps, network, True)
     loss_critic_col, g_critic_col = critic_grad_fn(params, traj_batch, targets_col, clip_eps, network, False)
 
-    # Combining gradients/loss.
+    # Combining gradients/loss (they should have zeroes for other heads).
     grads = jax.tree_map(lambda a, b, c: a + b + c, g_actor, g_critic_ind, g_critic_col)
     total_loss = loss_actor_ind + loss_actor_col + loss_critic_ind + loss_critic_col
     return grads, total_loss

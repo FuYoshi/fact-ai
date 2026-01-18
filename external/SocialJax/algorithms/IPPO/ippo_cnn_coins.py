@@ -348,17 +348,14 @@ def make_train(config, pbar=None):
             if config["PARAMETER_SHARING"]:
                 last_obs_batch = jnp.transpose(last_obs,(1,0,2,3,4)).reshape(-1, *(env.observation_space()[0]).shape)
                 # _, [NUM_ACTORS], [NUM_ACTORS]
-                _, last_val_ind, last_val_col = network.apply(train_state.params, last_obs_batch)
+                _, last_val_ind, _ = network.apply(train_state.params, last_obs_batch)
             else:
                 last_obs_batch = jnp.transpose(last_obs,(1,0,2,3,4))
                 last_val_ind = []
-                last_val_col = []
                 for i in range(env.num_agents):
-                    _, last_val_i, last_val_c = network[i].apply(train_state[i].params, last_obs_batch[i])
+                    _, last_val_i, _ = network[i].apply(train_state[i].params, last_obs_batch[i])
                     last_val_ind.append(last_val_i)
-                    last_val_col.append(last_val_c)
                 last_val_ind = jnp.stack(last_val_ind, axis=0)
-                last_val_col = jnp.stack(last_val_col, axis=0)
 
             def _calculate_gae(traj_batch, values):
                 def _get_advantages(gae_and_next_value, transition):
@@ -390,35 +387,32 @@ def make_train(config, pbar=None):
             if config["PARAMETER_SHARING"]:
                 # [NUM_STEPS, NUM_ACTORS], [NUM_STEPS, NUM_ACTORS].
                 advantages_ind, targets_ind = _calculate_gae(traj_batch, last_val_ind)
-                advantages_col, targets_col = _calculate_gae(traj_batch, last_val_col)
+                # Define collective returns as the average individual returns.
+                advantages_col = jnp.mean(advantages_ind, axis=1, keepdims=True)
+                targets_col = jnp.mean(targets_ind, axis=1, keepdims=True)
             else:
                 advantages_ind = []
-                advantages_col = []
                 targets_ind = []
-                targets_col = []
                 for i in range(env.num_agents):
                     advantages_i, targets_i = _calculate_gae(traj_batch[i], last_val_ind[i])
-                    advantages_c, targets_c = _calculate_gae(traj_batch[i], last_val_col[i])
                     advantages_ind.append(advantages_i)
-                    advantages_col.append(advantages_c)
                     targets_ind.append(targets_i)
-                    targets_col.append(targets_c)
                 advantages_ind = jnp.stack(advantages_ind, axis=0)
-                advantages_col = jnp.stack(advantages_col, axis=0)
                 targets_ind = jnp.stack(targets_ind, axis=0)
-                targets_col = jnp.stack(targets_col, axis=0)
+                advantages_col = jnp.mean(advantages_ind, axis=1, keepdims=True)
+                targets_col = jnp.mean(targets_ind, axis=1, keepdims=True)
 
             # UPDATE NETWORK
             def _update_epoch(update_state, unused, i):
                 def _update_minbatch(train_state, batch_info, network_used):
-                    traj_batch, adv_ind, targets_ind, adv_col, targets_col = batch_info
+                    traj_batch, advantages_ind, targets_ind = batch_info
 
                     if config["FCGRAD"]:
                         grads, total_loss = compute_fcgrad(
                             train_state.params,
                             traj_batch,
-                            adv_ind,
-                            adv_col,
+                            advantages_ind,
+                            advantages_col,
                             targets_ind,
                             targets_col,
                             config["CLIP_EPS"],
@@ -464,18 +458,18 @@ def make_train(config, pbar=None):
                             return total_loss, (value_loss, loss_actor, entropy)
 
                         grad_fn = jax.value_and_grad(_loss_fn, has_aux=True)
-                        total_loss, grads = grad_fn(train_state.params, traj_batch, adv_ind, targets_ind, network_used)
+                        total_loss, grads = grad_fn(train_state.params, traj_batch, advantages_ind, targets_ind, network_used)
                     train_state = train_state.apply_gradients(grads=grads)
                     return train_state, total_loss
 
-                train_state, traj_batch, advantages_ind, targets_ind, advantages_col, targets_col,rng = update_state
+                train_state, traj_batch, advantages_ind, targets_ind, rng = update_state
                 rng, _rng = jax.random.split(rng)
                 batch_size = config["MINIBATCH_SIZE"] * config["NUM_MINIBATCHES"]
                 assert (
                     batch_size == config["NUM_STEPS"] * config["NUM_ACTORS"]
                 ), "batch size must be equal to number of steps * number of actors"
                 permutation = jax.random.permutation(_rng, batch_size)
-                batch = (traj_batch, advantages_ind, targets_ind, advantages_col, targets_col)
+                batch = (traj_batch, advantages_ind, targets_ind)
                 batch = jax.tree_util.tree_map(lambda x: x.reshape((batch_size,) + x.shape[2:]), batch)
                 # if config["PARAMETER_SHARING"]:
 
@@ -502,11 +496,11 @@ def make_train(config, pbar=None):
                         lambda state, batch_info: _update_minbatch(state, batch_info, network[i]), train_state, minibatches
                     )
 
-                update_state = (train_state, traj_batch, advantages_ind, targets_ind, advantages_col, targets_col, rng)
+                update_state = (train_state, traj_batch, advantages_ind, targets_ind, rng)
                 return update_state, total_loss
 
             if config["PARAMETER_SHARING"]:
-                update_state = (train_state, traj_batch, advantages_ind, targets_ind, advantages_col, targets_col, rng)
+                update_state = (train_state, traj_batch, advantages_ind, targets_ind, rng)
                 update_state, loss_info = jax.lax.scan(
                     lambda state, unused: _update_epoch(state, unused, 0), update_state, None, config["UPDATE_EPOCHS"]
                 )
@@ -517,7 +511,7 @@ def make_train(config, pbar=None):
                 update_state_dict = []
                 metric = []
                 for i in range(env.num_agents):
-                    update_state = (train_state[i], traj_batch[i], advantages_ind[i], targets_ind[i], advantages_col[i], targets_col[i], rng)
+                    update_state = (train_state[i], traj_batch[i], advantages_ind[i], targets_ind[i], rng)
                     update_state, loss_info = jax.lax.scan(
                         lambda state, unused: _update_epoch(state, unused, i), update_state, None, config["UPDATE_EPOCHS"]
                     )
