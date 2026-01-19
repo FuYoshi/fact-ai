@@ -59,7 +59,7 @@
 
 # WandB
 "ENTITY": ""
-"PROJECT": "ippo-unfair-coin-test"
+"PROJECT": "ippo-unfair-coin-test"  # Note: Using shared team project (name is misleading but required for team access)
 "WANDB_MODE": "online"
 "WANDB_TAGS":
   - IPPO

@@ -1,5 +1,5 @@
 # =============================================================================
-# FCGrad on Unfair Coin Game - Paper-faithful implementation
+# FCGrad on Unfair Coin Game - FAST TESTING CONFIG
 # =============================================================================
 # FCGrad: Fair Conflict-aware Gradient Adjustment
 # Paper: "Fair Cooperation in Mixed-Motive Games via Conflict-Aware Gradient Adjustment"
@@ -10,47 +10,54 @@
 # - V_ind trained on individual rewards
 # - V_col trained on collective rewards (mean of all agents)
 # - FCGrad adjusts gradients when individual and collective objectives conflict
+#
+# Reduced parameters for faster training:
+# - Smaller grid size (12x8 instead of 16x11)
+# - Lower minibatches, higher learning rate
+# - Fewer timesteps and environments
 # =============================================================================
 
-# Learning rate (paper: 1e-4 with linear annealing)
-"LR": 0.0001
+# Learning rate (moderately increased for faster learning, but stable)
+"LR": 0.0005             # 5x higher than paper (0.0001) - more stable than 0.001
 "ANNEAL_LR": True
 
-# PPO hyperparameters (from paper Appendix B)
-"NUM_ENVS": 256
-"NUM_STEPS": 1000
-"TOTAL_TIMESTEPS": 1e9
+# PPO hyperparameters (reduced for faster training)
+"NUM_ENVS": 128          # Reduced from 256 (2x fewer) - enough for stable gradients
+"NUM_STEPS": 500         # Reduced from 1000 (2x fewer)
+"TOTAL_TIMESTEPS": 5e7   # 50M timesteps - enough to see learning curves diverge
 "UPDATE_EPOCHS": 2
-"NUM_MINIBATCHES": 500
+"NUM_MINIBATCHES": 64    # Reduced from 500 - still reasonable batch size
 "GAMMA": 0.99
 "GAE_LAMBDA": 0.95
 "CLIP_EPS": 0.2
-"ENT_COEF": 0.1      # Paper: 0.1
-"VF_COEF": 0.1       # Paper: 0.1
+"ENT_COEF": 0.1
+"VF_COEF": 0.1
 "MAX_GRAD_NORM": 0.5
 "ACTIVATION": "relu"
 
-# Environment
+# Environment - Unfair Coin Game (moderately smaller grid for faster training)
 "ENV_NAME": "coin_game"
 "ENV_KWARGS": 
   "num_agents": 2
-  "num_inner_steps": 1000
-  "shared_rewards": False     # CRITICAL: Individual rewards only
+  "num_inner_steps": 500      # Reduced from 1000 (2x fewer)
+  "shared_rewards": False     # CRITICAL: Individual rewards only (FCGrad requirement)
   "green_coin_prob": 0.9375   # UNFAIR: 15/16 green, 1/16 red
+  "grid_size": [12, 8]        # Moderately smaller: 12x8 (was 16x11) - preserves dynamics
+  "obs_size": 9               # Slightly smaller observation window (was 11)
   "cnn": True
   "jit": True
 
-# Reward shaping (not used, but keep for compatibility)
-"REW_SHAPING_HORIZON": 2.5e6
-"SHAPING_BEGIN": 1e6
+# Reward shaping (reduced horizons)
+"REW_SHAPING_HORIZON": 2.5e5   # Reduced from 2.5e6
+"SHAPING_BEGIN": 1e5           # Reduced from 1e6
 
 # Training
 "SEED": 42
 "NUM_SEEDS": 1
-"REWARD": "individual"
+"REWARD": "individual"        # Individual rewards (FCGrad requirement)
 "GIF_NUM_FRAMES": 250
 "PARAMETER_SHARING": True
-"TUNE": False            # Set to True for hyperparameter sweep
+"TUNE": False
 
 # FCGrad settings - ENABLED
 "FCGRAD": True               # Enable FCGrad gradient adjustment
@@ -64,3 +71,5 @@
 "WANDB_TAGS":
   - FCGRAD
   - UNFAIR_COIN
+  - INDIVIDUAL_REWARD
+  - FAST_TEST

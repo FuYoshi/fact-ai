@@ -557,6 +557,13 @@ def make_train(config, pbar=None):
                 reward_reshaped = reward_batch.reshape(reward_batch.shape[0], num_agents, num_envs)
                 # Sum over steps, then mean over envs: per-agent rollout return
                 rollout_returns = reward_reshaped.sum(axis=0).mean(axis=1)  # (num_agents,)
+                
+                # Debug: trace reward aggregation
+                jax.debug.print("ROLLOUT RETURNS (PARAM_SHARING):")
+                jax.debug.print("  reward_batch shape: {shape}", shape=reward_batch.shape)
+                jax.debug.print("  reward_reshaped shape: {shape}", shape=reward_reshaped.shape)
+                jax.debug.print("  per-agent sums (before mean): {sums}", sums=reward_reshaped.sum(axis=0))
+                jax.debug.print("  rollout_returns: {ret}", ret=rollout_returns)
             else:
                 # Non-parameter-sharing: rewards already per agent
                 per_agent_returns_list = []
@@ -564,7 +571,14 @@ def make_train(config, pbar=None):
                     reward_batch = traj_batch[i].reward  # (num_steps, num_envs)
                     rollout_returns_i = reward_batch.sum(axis=0).mean()  # Sum over steps, avg over envs
                     per_agent_returns_list.append(rollout_returns_i)
+                    
+                    # Debug: trace per-agent aggregation
+                    jax.debug.print("ROLLOUT RETURNS (NO_PARAM_SHARING) agent {i}:", i=i)
+                    jax.debug.print("  reward_batch shape: {shape}", shape=reward_batch.shape)
+                    jax.debug.print("  per-env sums: {sums}", sums=reward_batch.sum(axis=0))
+                    jax.debug.print("  agent {i} return: {ret}", i=i, ret=rollout_returns_i)
                 rollout_returns = jnp.array(per_agent_returns_list)  # (num_agents,)
+                jax.debug.print("  final rollout_returns: {ret}", ret=rollout_returns)
             
             # Compute fairness metrics from per-agent rollout returns
             fairness = compute_fairness_metrics(rollout_returns)
