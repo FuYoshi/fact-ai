@@ -104,6 +104,7 @@ class ActorCritic(nn.Module):
     """Actor-Critic network with optional dual critic heads."""
     action_dim: int
     activation: str = "relu"
+    embedder: str = "embedder"
     actor_head: str = "actor_head"
     critic_head_ind: str = "critic_head_ind"
     critic_head_col: str = "critic_head_col"
@@ -112,7 +113,7 @@ class ActorCritic(nn.Module):
     @nn.compact
     def __call__(self, x):
         activation = nn.relu if self.activation == "relu" else nn.tanh
-        embedding = CNN(self.activation)(x)
+        embedding = CNN(self.activation, name=self.embedder)(x)
 
         pi = ActorHead(self.action_dim, activation=activation, name=self.actor_head)(embedding)
 
