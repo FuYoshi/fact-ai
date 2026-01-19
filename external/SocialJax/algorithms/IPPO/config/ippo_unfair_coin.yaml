@@ -1,14 +1,13 @@
 # =============================================================================
-# IPPO Baseline on Unfair Coin Game - Collective Rewards
+# IPPO Baseline on Unfair Coin Game - Paper experiment
 # =============================================================================
 # Baseline IPPO (without FCGrad) for the Unfair Coin Game experiment
 # Paper: "Fair Cooperation in Mixed-Motive Games via Conflict-Aware Gradient Adjustment"
 # by Woojun Kim and Katia Sycara (Carnegie Mellon University)
 #
-# This config matches the baseline experiment with collective rewards:
+# This config matches the baseline experiment in the paper:
 # - Unfair Coin Game: green_coin_prob = 0.9375 (15/16 green, 1/16 red)
-# - Collective rewards (shared_rewards: True) - uses MEAN per paper definition
-#   Collective return = average of individual returns (R_col = 1/N * sum(R^i))
+# - Individual rewards (shared_rewards: False)
 # - Standard IPPO without FCGrad gradient adjustment
 # =============================================================================
 
@@ -35,7 +34,7 @@
 "ENV_KWARGS": 
   "num_agents": 2
   "num_inner_steps": 1000
-  "shared_rewards": True      # CRITICAL: Collective rewards (mean of individual)
+  "shared_rewards": False     # CRITICAL: Individual rewards only
   "green_coin_prob": 0.9375   # UNFAIR: 15/16 green, 1/16 red (paper setting)
   "cnn": True
   "jit": True
@@ -47,10 +46,9 @@
 # Training
 "SEED": 42
 "NUM_SEEDS": 1
-"REWARD": "common"           # Collective/common rewards
+"REWARD": "individual"
 "GIF_NUM_FRAMES": 250
 "PARAMETER_SHARING": True
-"TUNE": False            # Set to True for hyperparameter sweep
 
 # FCGrad settings - DISABLED (this is the baseline)
 "FCGRAD": False              # Baseline IPPO without FCGrad
@@ -59,10 +57,9 @@
 
 # WandB
 "ENTITY": ""
-"PROJECT": "ippo-unfair-coin-test"
+"PROJECT": "ippo-unfair-coin"
 "WANDB_MODE": "online"
 "WANDB_TAGS":
   - IPPO
   - BASELINE
   - UNFAIR_COIN
-  - COMMON_REWARD

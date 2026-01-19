@@ -919,10 +919,11 @@ class CoinGame(MultiAgentEnv):
 
 
             if self.shared_rewards:
-                rewards = jnp.zeros((2, 1))
-                rewards = rewards.at[0, 0].set(red_reward[0])
-                rewards = rewards.at[1, 0].set(green_reward[0])
-                rewards_mean = jnp.mean(rewards)  # Collective return = average (per paper definition)
+                # Save individual rewards before averaging
+                indiv_rewards = jnp.zeros((2, 1))
+                indiv_rewards = indiv_rewards.at[0, 0].set(red_reward[0])
+                indiv_rewards = indiv_rewards.at[1, 0].set(green_reward[0])
+                rewards_mean = jnp.mean(indiv_rewards)  # Collective return = average (per paper definition)
                 rewards_mean_all_agents = jnp.zeros((self.num_agents, 1))
                 rewards_mean_all_agents += rewards_mean
                 rewards = rewards_mean_all_agents
