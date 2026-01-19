@@ -127,11 +127,11 @@ def fcgrad_adjust(
     Returns:
         (PyTree): pytree with adjusted gradients.
     """
-    def aligned(_):
+    def _aligned(_):
         return beta_weighting(g_ind, g_col, beta)
         # TODO: if g_ind (g_col) is zero, then use g_col (g_ind). Does not early stop
 
-    def conflict(_):
+    def _conflict(_):
         return jax.lax.cond(
             collective_disadvantaged(val_ind, val_col),
             lambda _: pytree_project(g_col, g_ind),
@@ -140,7 +140,7 @@ def fcgrad_adjust(
         )
 
     dot = pytree_dot(g_ind, g_col)
-    grad_fcgrad = jax.lax.cond(grads_align(dot), aligned, conflict, operand=None)
+    grad_fcgrad = jax.lax.cond(grads_align(dot), _aligned, _conflict, operand=None)
     return grad_fcgrad
 
 
@@ -212,6 +212,13 @@ def value_loss(
     return val_loss
 
 
+def embedder_gradient(gai, gac, gci, gcc):
+    g_emb_actor = jax.tree_map(lambda x, y: (x + y) / 2, gai, gac)
+    g_emb_critic = jax.tree_map(lambda x, y: (x + y) / 2, gci, gcc)
+    g_emb = jax.tree_map(lambda x, y: x + y, g_emb_actor, g_emb_critic)
+    return g_emb
+
+
 def compute_fcgrad(
     params: PyTree,
     traj_batch: PyTree,
@@ -246,28 +253,36 @@ def compute_fcgrad(
     """
     # Actor gradients/loss. Retrieve per-sample returns
     actor_grad_fn = jax.value_and_grad(policy_loss, has_aux=True)
-    (loss_actor_ind, returns_ind), g_ind = actor_grad_fn(params, traj_batch, adv_ind, clip_eps, network, True)
-    (loss_actor_col, returns_col), g_col = actor_grad_fn(params, traj_batch, adv_col, clip_eps, network, False)
-    g_actor_ind = g_ind["params"][network.actor_head]
-    g_actor_col = g_col["params"][network.actor_head]
+    (loss_actor_ind, returns_ind), g_ind_all = actor_grad_fn(params, traj_batch, adv_ind, clip_eps, network, True)
+    (loss_actor_col, returns_col), g_col_all = actor_grad_fn(params, traj_batch, adv_col, clip_eps, network, False)
+    g_ind_actor = g_ind_all["params"][network.actor_head]
+    g_col_actor = g_col_all["params"][network.actor_head]
 
     # FCGrad uses the expected returns, not the per-sample returns.
     val_ind = jnp.mean(returns_ind)
     val_col = jnp.mean(returns_col)
-    g_actor = fcgrad_adjust(g_actor_ind, g_actor_col, val_ind, val_col, beta)
+    g_actor = fcgrad_adjust(g_ind_actor, g_col_actor, val_ind, val_col, beta)
 
     # Critic gradients/loss
     critic_grad_fn = jax.value_and_grad(value_loss)
-    loss_critic_ind, g_critic_ind = critic_grad_fn(params, traj_batch, targets_ind, clip_eps, network, True)
-    loss_critic_col, g_critic_col = critic_grad_fn(params, traj_batch, targets_col, clip_eps, network, False)
-    g_critic_ind = g_critic_ind["params"][network.critic_head_ind]
-    g_critic_col = g_critic_col["params"][network.critic_head_col]
+    loss_critic_ind, g_ind_all_critic = critic_grad_fn(params, traj_batch, targets_ind, clip_eps, network, True)
+    loss_critic_col, g_col_all_critic = critic_grad_fn(params, traj_batch, targets_col, clip_eps, network, False)
+    g_ind_critic = g_ind_all_critic["params"][network.critic_head_ind]
+    g_col_critic = g_col_all_critic["params"][network.critic_head_col]
+
+    # Combine Actor and Critic gradients (they both use backbone/embedder).
+    gai = g_ind_all["params"][network.embedder]
+    gac = g_col_all["params"][network.embedder]
+    gci = g_ind_all_critic["params"][network.embedder]
+    gcc = g_col_all_critic["params"][network.embedder]
+    g_emb = embedder_gradient(gai, gac, gci, gcc)
 
     # Combine the gradients.
-    grads = params.copy()
+    grads = g_ind_all
+    grads["params"][network.embedder] = g_emb  # TODO: how to update embedder?
     grads["params"][network.actor_head] = g_actor
-    grads["params"][network.critic_head_ind] = g_critic_ind
-    grads["params"][network.critic_head_col] = g_critic_col
+    grads["params"][network.critic_head_ind] = g_ind_critic
+    grads["params"][network.critic_head_col] = g_col_critic
 
     # Combining gradients/loss (they should have zeroes for other heads).
     total_loss = loss_actor_ind + loss_actor_col + loss_critic_ind + loss_critic_col
