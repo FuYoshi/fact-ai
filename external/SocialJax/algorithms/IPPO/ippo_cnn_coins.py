@@ -133,8 +133,10 @@ class Transition(NamedTuple):
     """Single transition in a trajectory."""
     done: jnp.ndarray
     action: jnp.ndarray
-    value: jnp.ndarray
-    reward: jnp.ndarray
+    value_ind: jnp.ndarray
+    value_col: jnp.ndarray
+    reward_ind: jnp.ndarray
+    reward_col: jnp.ndarray
     log_prob: jnp.ndarray
     obs: jnp.ndarray
     info: Dict[str, jnp.ndarray]
@@ -244,7 +246,8 @@ def compute_gae(
     traj_batch: Transition,
     last_value: jnp.ndarray,
     gamma: float,
-    gae_lambda: float
+    gae_lambda: float,
+    individual: bool = True,
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """
     Compute Generalized Advantage Estimation.
@@ -254,14 +257,19 @@ def compute_gae(
         last_value: Value estimate for final state
         gamma: Discount factor
         gae_lambda: GAE lambda parameter
+        individual: use individual or collective value and reward.
 
     Returns:
         advantages: GAE advantages
         targets: Value targets (advantages + values)
     """
-    def _get_advantages(gae_and_next_value, transition):
+    def _get_advantages(gae_and_next_value, transition: Transition):
         gae, next_value = gae_and_next_value
-        done, value, reward = transition.done, transition.value, transition.reward
+        done = transition.done
+        if individual:
+            value, reward = transition.value_ind, transition.reward_ind
+        else:
+            value, reward = transition.value_col, transition.reward_col
 
         delta = reward + gamma * next_value * (1 - done) - value
         gae = delta + gamma * gae_lambda * (1 - done) * gae
@@ -276,7 +284,12 @@ def compute_gae(
         unroll=16,
     )
 
-    targets = advantages + traj_batch.value
+    if individual:
+        value = traj_batch.value_ind
+    else:
+        value = traj_batch.value_col
+
+    targets = advantages + value
     return advantages, targets
 
 
@@ -305,7 +318,7 @@ def ppo_loss(
     log_prob = pi.log_prob(traj_batch.action)
 
     # Value loss with clipping
-    value_pred_clipped = traj_batch.value + (value - traj_batch.value).clip(-clip_eps, clip_eps)
+    value_pred_clipped = traj_batch.value_ind + (value - traj_batch.value_ind).clip(-clip_eps, clip_eps)
     value_losses = jnp.square(value - targets)
     value_losses_clipped = jnp.square(value_pred_clipped - targets)
     value_loss = 0.5 * jnp.maximum(value_losses, value_losses_clipped).mean()
@@ -411,7 +424,7 @@ def make_train(config: Dict, pbar: Optional[tqdm] = None):
                 )
 
                 # Get actions from policy
-                pi, value, _ = network.apply(train_state.params, obs_batch)
+                pi, value_ind, value_col = network.apply(train_state.params, obs_batch)
                 action = pi.sample(seed=action_rng)
                 log_prob = pi.log_prob(action)
 
@@ -436,11 +449,19 @@ def make_train(config: Dict, pbar: Optional[tqdm] = None):
                 reward_batch = batchify(reward, env.agents, num_actors).squeeze()
                 done_batch = batchify_dict(done, env.agents, num_actors).squeeze()
 
+                # Collective reward is the average of the mean reward.
+                # Repeat it so that each agent has the corresponding collective reward
+                # reward shape: (num_envs, num_agents)
+                reward_col_env = jnp.mean(reward, axis=1)
+                reward_col = jnp.repeat(reward_col_env, repeats=num_agents, axis=0)
+
                 transition = Transition(
                     done=done_batch,
                     action=action,
-                    value=value,
-                    reward=reward_batch,
+                    value_ind=value_ind,
+                    value_col=value_col,
+                    reward_ind=reward_batch,
+                    reward_col=reward_col,
                     log_prob=log_prob,
                     obs=obs_batch,
                     info=info_processed,
@@ -463,22 +484,16 @@ def make_train(config: Dict, pbar: Optional[tqdm] = None):
             last_obs_batch = jnp.transpose(last_obs, (1, 0, 2, 3, 4)).reshape(
                 -1, *env.observation_space()[0].shape
             )
-            _, last_val, _ = network.apply(train_state.params, last_obs_batch)
+            _, last_val_ind, last_val_col = network.apply(train_state.params, last_obs_batch)
 
             advantages_ind, targets_ind = compute_gae(
-                traj_batch, last_val, config["GAMMA"], config["GAE_LAMBDA"]
+                traj_batch, last_val_ind, config["GAMMA"], config["GAE_LAMBDA"]
             )
 
-            # Collective advantages (for FCGrad)
-            advantages_col = jnp.mean(
-                advantages_ind.reshape(config["NUM_STEPS"], num_agents, num_envs),
-                axis=1, keepdims=False
-            ).repeat(num_agents, axis=0).reshape(config["NUM_STEPS"], -1)
-
-            targets_col = jnp.mean(
-                targets_ind.reshape(config["NUM_STEPS"], num_agents, num_envs),
-                axis=1, keepdims=False
-            ).repeat(num_agents, axis=0).reshape(config["NUM_STEPS"], -1)
+            # Collective advantages/targets (for FCGrad).
+            advantages_col, targets_col = compute_gae(
+                traj_batch, last_val_col, config["GAMMA"], config["GAE_LAMBDA"], individual=False
+            )
 
             # -----------------------------------------------------------------
             # Policy Update
@@ -554,7 +569,7 @@ def make_train(config: Dict, pbar: Optional[tqdm] = None):
             # Compute per-agent rollout returns for fairness metrics
             # Use original_rewards when shared_rewards is enabled
             rollout_returns = compute_rollout_returns(
-                rewards=traj_batch.reward,
+                rewards=traj_batch.reward_ind,
                 original_rewards=traj_batch.original_rewards,
                 num_envs=num_envs,
                 num_agents=num_agents,

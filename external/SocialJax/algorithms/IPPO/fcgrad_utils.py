@@ -127,6 +127,7 @@ def fcgrad_adjust(
     Returns:
         (PyTree): pytree with adjusted gradients.
     """
+
     def _aligned(_):
         return beta_weighting(g_ind, g_col, beta)
         # TODO: if g_ind (g_col) is zero, then use g_col (g_ind). Does not early stop
@@ -146,12 +147,11 @@ def fcgrad_adjust(
 
 def policy_loss(
     params: PyTree,
-    traj_batch: PyTree,
+    traj_batch,
     advantages: jnp.ndarray,
     clip_eps: float,
     network_used,
-    individual: bool = True,
-) -> tuple[jnp.ndarray, jnp.ndarray]:
+) -> jnp.ndarray:
     """Compute the policy loss based on the advantages.
 
     Args:
@@ -160,12 +160,11 @@ def policy_loss(
         advantages (jnp.ndarray): advantages of the actor.
         clip_eps (float): epsilon parameter for PPO clipping.
         network_used: ActorCritic network for forward pass.
-        individual (bool): bool to determine which value to return as aux.
 
     Returns:
         (jnp.ndarray): scalar loss represented as 0D jax array.
     """
-    pi, val_ind, val_col = network_used.apply(params, traj_batch.obs)
+    pi, _, _ = network_used.apply(params, traj_batch.obs)
     log_prob = pi.log_prob(traj_batch.action)
     ratio = jnp.exp(log_prob - traj_batch.log_prob)
 
@@ -173,13 +172,12 @@ def policy_loss(
     unclipped = ratio * advantages
     clipped = jnp.clip(ratio, 1 - clip_eps, 1 + clip_eps) * advantages
 
-    aux = val_ind if individual else val_col
-    return -jnp.mean(jnp.minimum(unclipped, clipped)), aux
+    return -jnp.mean(jnp.minimum(unclipped, clipped))
 
 
 def value_loss(
     params: PyTree,
-    traj_batch: PyTree,
+    traj_batch,
     targets: jnp.ndarray,
     clip_eps: float,
     network_used,
@@ -203,8 +201,8 @@ def value_loss(
     _, val_ind, val_col = network_used.apply(params, traj_batch.obs)
 
     value = val_ind if individual else val_col
+    baseline = traj_batch.value_ind if individual else traj_batch.value_col
 
-    baseline = traj_batch.value
     value_pred_clipped = baseline + (value - baseline).clip(-clip_eps, clip_eps)
     val_losses_unclipped = jnp.square(value - targets)
     val_losses_clipped = jnp.square(value_pred_clipped - targets)
@@ -212,20 +210,13 @@ def value_loss(
     return val_loss
 
 
-def embedder_gradient(gai, gac, gci, gcc):
-    g_emb_actor = jax.tree_map(lambda x, y: (x + y) / 2, gai, gac)
-    g_emb_critic = jax.tree_map(lambda x, y: (x + y) / 2, gci, gcc)
-    g_emb = jax.tree_map(lambda x, y: x + y, g_emb_actor, g_emb_critic)
-    return g_emb
-
-
 def compute_fcgrad(
     params: PyTree,
-    traj_batch: PyTree,
+    traj,
     adv_ind: jnp.ndarray,
     adv_col: jnp.ndarray,
-    targets_ind: jnp.ndarray,
-    targets_col: jnp.ndarray,
+    tgt_ind: jnp.ndarray,
+    tgt_col: jnp.ndarray,
     clip_eps: float,
     beta: float,
     network,
@@ -237,56 +228,46 @@ def compute_fcgrad(
 
     Args:
         params (PyTree): parameters of the ActorCritic network.
-        traj_batch (Transition): batch of trajectories.
+        traj (Transition): batch of trajectories.
         adv_ind (jnp.ndarray): batch of individual advantages.
         adv_col (jnp.ndarray): batch of collective advantages.
-        targets_ind (jnp.ndarray): batch of individual targets.
-        targets_col (jnp.ndarray): batch of collective targets.
+        tgt_ind (jnp.ndarray): batch of individual targets.
+        tgt_col (jnp.ndarray): batch of collective targets.
         clip_eps (float): epsilon parameter for PPO clipping.
         beta (float): beta parameter for FCGrad beta weighting.
-        network_used: ActorCritic network for the forward pass.
+        network: ActorCritic network for the forward pass.
 
     Returns:
         A tuple containing:
             - grads (for actor/critic for individual/collective objective).
             - total_loss
     """
-    # Actor gradients/loss. Retrieve per-sample returns
-    actor_grad_fn = jax.value_and_grad(policy_loss, has_aux=True)
-    (loss_actor_ind, returns_ind), g_ind_all = actor_grad_fn(params, traj_batch, adv_ind, clip_eps, network, True)
-    (loss_actor_col, returns_col), g_col_all = actor_grad_fn(params, traj_batch, adv_col, clip_eps, network, False)
-    g_ind_actor = g_ind_all["params"][network.actor_head]
-    g_col_actor = g_col_all["params"][network.actor_head]
+    # Compute the loss/gradient for forward pass on embedding + actor head.
+    # Gradients w.r.t. critic heads is zero.
+    actor_grad_fn = jax.value_and_grad(policy_loss)
+    l_actor_ind, g_actor_ind = actor_grad_fn(params, traj, adv_ind, clip_eps, network)
+    l_actor_col, g_actor_col = actor_grad_fn(params, traj, adv_col, clip_eps, network)
 
-    # FCGrad uses the expected returns, not the per-sample returns.
-    val_ind = jnp.mean(returns_ind)
-    val_col = jnp.mean(returns_col)
-    g_actor = fcgrad_adjust(g_ind_actor, g_col_actor, val_ind, val_col, beta)
+    # Perform FCGrad on the policy gradients (emb + actor).
+    # V_ind, V_col are the expected returns.
+    g_actor = fcgrad_adjust(
+        g_ind=g_actor_ind,
+        g_col=g_actor_col,
+        val_ind=jnp.mean(traj.reward_ind),  # TODO: should we use discounting?
+        val_col=jnp.mean(traj.reward_col),  # TODO: should we use discounting?
+        beta=beta,
+    )
 
-    # Critic gradients/loss
-    critic_grad_fn = jax.value_and_grad(value_loss)
-    loss_critic_ind, g_ind_all_critic = critic_grad_fn(params, traj_batch, targets_ind, clip_eps, network, True)
-    loss_critic_col, g_col_all_critic = critic_grad_fn(params, traj_batch, targets_col, clip_eps, network, False)
-    g_ind_critic = g_ind_all_critic["params"][network.critic_head_ind]
-    g_col_critic = g_col_all_critic["params"][network.critic_head_col]
+    # Compute the loss/gradient for forward pass on embedding + critic head.
+    # Gradients w.r.t. actor head (and other critic head) is zero.
+    grad_fn = jax.value_and_grad(value_loss)
+    l_critic_ind, g_critic_ind = grad_fn(params, traj, tgt_ind, clip_eps, network, True)
+    l_critic_col, g_critic_col = grad_fn(params, traj, tgt_col, clip_eps, network, False)
 
-    # Combine Actor and Critic gradients (they both use backbone/embedder).
-    gai = g_ind_all["params"][network.embedder]
-    gac = g_col_all["params"][network.embedder]
-    gci = g_ind_all_critic["params"][network.embedder]
-    gcc = g_col_all_critic["params"][network.embedder]
-    g_emb = embedder_gradient(gai, gac, gci, gcc)
-
-    # Combine the gradients.
-    grads = g_ind_all
-    grads["params"][network.embedder] = g_emb  # TODO: how to update embedder?
-    grads["params"][network.actor_head] = g_actor
-    grads["params"][network.critic_head_ind] = g_ind_critic
-    grads["params"][network.critic_head_col] = g_col_critic
-
-    # Combining gradients/loss (they should have zeroes for other heads).
-    total_loss = loss_actor_ind + loss_actor_col + loss_critic_ind + loss_critic_col
-    return grads, total_loss
+    # Combine the gradients/losses. Update embedder using the sum of other gradients.
+    grads = jax.tree_map(lambda a, b, c: a + b + c, g_actor, g_critic_ind, g_critic_col)
+    loss_total = l_actor_ind + l_actor_col + l_critic_ind + l_critic_col
+    return grads, loss_total
 
 
 # ===================================================
