@@ -15,7 +15,7 @@
 echo "=============================================="
 echo "  Job: IPPO Individual Baseline"
 echo "  Seed: 72"
-echo "  Config: ippo_unfair_coin"
+echo "  Config: ippo_unfair_coin_ind"
 echo "  Start: $(date)"
 echo "=============================================="
 
@@ -35,7 +35,7 @@ echo "GPU Info:"
 nvidia-smi --query-gpu=name,memory.total --format=csv
 echo ""
 
-python main.py --config ippo_unfair_coin --seed 72
+python main.py --config ippo_unfair_coin_ind --seed 72
 
 echo ""
 echo "=============================================="

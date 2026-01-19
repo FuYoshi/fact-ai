@@ -50,6 +50,7 @@
 "REWARD": "common"           # Collective/common rewards
 "GIF_NUM_FRAMES": 250
 "PARAMETER_SHARING": True
+"TUNE": False            # Set to True for hyperparameter sweep
 
 # FCGrad settings - DISABLED (this is the baseline)
 "FCGRAD": False              # Baseline IPPO without FCGrad
