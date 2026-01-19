@@ -17,8 +17,8 @@
 # - Fewer timesteps and environments
 # =============================================================================
 
-# Learning rate (moderately increased for faster learning, but stable)
-"LR": 0.0005             # 5x higher than paper (0.0001) - more stable than 0.001
+# Learning rate (increased for faster learning in fast test environment)
+"LR": 0.001              # 10x higher than paper (0.0001) - for fast testing to see if agent 1 can learn positive returns
 "ANNEAL_LR": True
 
 # PPO hyperparameters (reduced for faster training)
