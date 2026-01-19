@@ -73,10 +73,46 @@ class CNN(nn.Module):
         return x
 
 
+class ActorHead(nn.Module):
+    action_dim: int
+    activation: str = "relu"
+
+    @nn.compact
+    def __call__(self, x):
+        if self.activation == "relu":
+            activation = nn.relu
+        else:
+            activation = nn.tanh
+
+        x = nn.Dense(64, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0))(x)
+        x = activation(x)
+        x = nn.Dense(self.action_dim, kernel_init=orthogonal(0.01), bias_init=constant(0.0))(x)
+        return distrax.Categorical(logits=x)
+
+
+class CriticHead(nn.Module):
+    activation: str = "relu"
+
+    @nn.compact
+    def __call__(self, x):
+        if self.activation == "relu":
+            activation = nn.relu
+        else:
+            activation = nn.tanh
+
+        x = nn.Dense(64, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0))(x)
+        x = activation(x)
+        x = nn.Dense(1, kernel_init=orthogonal(1.0), bias_init=constant(0.0))(x)
+        return jnp.squeeze(x, axis=-1)
+
+
 class ActorCritic(nn.Module):
     action_dim: Sequence[int]
     activation: str = "relu"
     use_dual_head: bool = False
+    actor_head: str = "actor_head"
+    critic_head_ind: str = "critic_head_ind"
+    critic_head_col: str = "critic_head_col"
 
     @nn.compact
     def __call__(self, x):
@@ -87,25 +123,13 @@ class ActorCritic(nn.Module):
 
         embedding = CNN(self.activation)(x)
 
-        actor_mean = nn.Dense(64, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0))(embedding)
-        actor_mean = activation(actor_mean)
-        actor_mean = nn.Dense(self.action_dim, kernel_init=orthogonal(0.01), bias_init=constant(0.0))(actor_mean)
-        pi = distrax.Categorical(logits=actor_mean)
+        pi = ActorHead(self.action_dim, activation=activation, name=self.actor_head)(embedding)
 
-        # Critic head to compute the individual objective value.
-        critic_ind = nn.Dense(64, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0))(embedding)
-        critic_ind = activation(critic_ind)
-        critic_ind = nn.Dense(1, kernel_init=orthogonal(1.0), bias_init=constant(0.0))(critic_ind)
-        critic_ind = jnp.squeeze(critic_ind, axis=-1)
+        critic_ind = CriticHead(activation=activation, name=self.critic_head_ind)(embedding)
 
-        # Critic head to compute the collective objective value.
         if self.use_dual_head:
-            critic_col = nn.Dense(64, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0))(embedding)
-            critic_col = activation(critic_col)
-            critic_col = nn.Dense(1, kernel_init=orthogonal(1.0), bias_init=constant(0.0))(critic_col)
-            critic_col = jnp.squeeze(critic_col, axis=-1)
+            critic_col = CriticHead(activation=activation, name=self.critic_head_col)(embedding)
             return pi, critic_ind, critic_col
-        # second critic_ind is unused.
         return pi, critic_ind, critic_ind
 
 
@@ -522,13 +546,13 @@ def make_train(config, pbar=None):
                     metric_i['loss'] = loss_info[0]
                     metric.append(metric_i)
                     rng = update_state[-1]
-                
+
             def _to_native(x):
                 """Convert JAX arrays to Python native types."""
                 if isinstance(x, (jnp.ndarray, jnp.generic)):
                     return float(x.item()) if x.ndim == 0 else float(x.mean())
                 return x
-            
+
             def callback(metric):
                 # Convert JAX arrays to Python native types for wandb logging
                 metric_converted = jax.tree_map(_to_native, metric)
@@ -543,13 +567,13 @@ def make_train(config, pbar=None):
                     })
 
             update_step = update_step + 1
-            
+
             # Extract fairness metrics from rollout returns (paper-faithful: fixed-length rollouts)
             # Paper uses "fixed-length rollouts of 1000 steps" - compute per-agent returns over entire rollout
             # batchify() creates agent-major ordering: [agent0_env0, agent0_env1, ..., agent0_envN-1, agent1_env0, ...]
             num_envs = config["NUM_ENVS"]
             num_agents = env.num_agents
-            
+
             if config["PARAMETER_SHARING"]:
                 # traj_batch.reward shape: (num_steps, num_envs * num_agents) with agent-major ordering
                 reward_batch = traj_batch.reward  # (num_steps, num_envs * num_agents)
@@ -557,7 +581,7 @@ def make_train(config, pbar=None):
                 reward_reshaped = reward_batch.reshape(reward_batch.shape[0], num_agents, num_envs)
                 # Sum over steps, then mean over envs: per-agent rollout return
                 rollout_returns = reward_reshaped.sum(axis=0).mean(axis=1)  # (num_agents,)
-                
+
                 # Debug: trace reward aggregation
                 jax.debug.print("ROLLOUT RETURNS (PARAM_SHARING):")
                 jax.debug.print("  reward_batch shape: {shape}", shape=reward_batch.shape)
@@ -571,7 +595,7 @@ def make_train(config, pbar=None):
                     reward_batch = traj_batch[i].reward  # (num_steps, num_envs)
                     rollout_returns_i = reward_batch.sum(axis=0).mean()  # Sum over steps, avg over envs
                     per_agent_returns_list.append(rollout_returns_i)
-                    
+
                     # Debug: trace per-agent aggregation
                     jax.debug.print("ROLLOUT RETURNS (NO_PARAM_SHARING) agent {i}:", i=i)
                     jax.debug.print("  reward_batch shape: {shape}", shape=reward_batch.shape)
@@ -579,17 +603,17 @@ def make_train(config, pbar=None):
                     jax.debug.print("  agent {i} return: {ret}", i=i, ret=rollout_returns_i)
                 rollout_returns = jnp.array(per_agent_returns_list)  # (num_agents,)
                 jax.debug.print("  final rollout_returns: {ret}", ret=rollout_returns)
-            
+
             # Compute fairness metrics from per-agent rollout returns
             fairness = compute_fairness_metrics(rollout_returns)
             # Keep as JAX arrays - convert to float in callback when logging
             fairness_metrics_to_log = fairness
             for i in range(num_agents):
                 fairness_metrics_to_log[f"agent_{i}_return"] = rollout_returns[i]
-            
+
             # Average metrics (this will corrupt fairness if included, so we add them after)
             metric = jax.tree_map(lambda x: x.mean(), metric)
-            
+
             # Add fairness metrics AFTER averaging (so they don't get corrupted)
             metric.update(fairness_metrics_to_log)
             if config["PARAMETER_SHARING"]:

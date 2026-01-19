@@ -91,26 +91,6 @@ def collective_disadvantaged(val_ind: jnp.ndarray, val_col: jnp.ndarray) -> jnp.
     return val_col < val_ind
 
 
-def pytree_allclose(pytree, value, atol=1e-8, rtol=1e-5):
-    """Check if all leaves in pytree are close to value using
-    absolute and relative tolerance.
-
-    Args:
-        pytree (PyTree): pytree to check.
-        value (float): value to check for
-        atol (float): absolute tolerance.
-        atol (float): relative tolerance.
-
-    Returns:
-        True if all leaves are close to value, False otherwise.
-    """
-    leaf_checks = jax.tree_map(
-        lambda x: jnp.all(jnp.isclose(x, value, atol=atol, rtol=rtol)), pytree
-    )
-    return jax.tree_util.tree_reduce(lambda a, b: a & b, leaf_checks)
-
-
-
 def fcgrad_adjust(
     g_ind: PyTree,
     g_col: PyTree,
@@ -150,17 +130,6 @@ def fcgrad_adjust(
     def aligned(_):
         return beta_weighting(g_ind, g_col, beta)
         # TODO: if g_ind (g_col) is zero, then use g_col (g_ind). Does not early stop
-        # return jax.lax.cond(
-        #     pytree_allclose(g_col, 0.0),
-        #     lambda _: g_ind,
-        #     lambda _: jax.lax.cond(
-        #         pytree_allclose(g_ind, 0.0),
-        #         lambda _: g_col,
-        #         lambda _: beta_weighting(g_ind, g_col, beta),
-        #         operand=None,
-        #     ),
-        #     operand=None,
-        # )
 
     def conflict(_):
         return jax.lax.cond(
@@ -173,163 +142,6 @@ def fcgrad_adjust(
     dot = pytree_dot(g_ind, g_col)
     grad_fcgrad = jax.lax.cond(grads_align(dot), aligned, conflict, operand=None)
     return grad_fcgrad
-
-
-def combined_losses(
-    params: PyTree,
-    traj_batch: PyTree,
-    advantages_ind: jnp.ndarray,
-    advantages_col: jnp.ndarray,
-    targets_ind: jnp.ndarray,
-    targets_col: jnp.ndarray,
-    clip_eps: float,
-    network_used,
-) -> tuple[
-    tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray],
-    tuple[float, PyTree, PyTree],
-]:
-    """Do a forward pass through network_used and compute the actor and critic
-    losses. Also returns auxilary data containing the total_loss and the values
-    of the individual and collective objective for each sample.
-
-    Args:
-        params (PyTree): parameters of the ActorCritic network.
-        traj_batch (Transition): batch of trajectories.
-        advantages_ind (jnp.ndarray): batch of individual advantages.
-        advantages_col (jnp.ndarray): batch of collective advantages.
-        targets_ind (jnp.ndarray): batch of individual targets.
-        targets_col (jnp.ndarray): batch of collective targets.
-        clip_eps (float): epsilon parameter for PPO clipping.
-        network_used: ActorCritic network for the forward pass.
-
-    Returns:
-        A tuple containing:
-            - individual/collective losses for the actor/critic.
-            - auxilary data consisting of:
-                - total_loss
-                - individual objective values of the batch.
-                - collective objective values of the batch.
-    """
-
-    def _policy_loss(
-        pi,
-        traj_batch: PyTree,
-        advantages: jnp.ndarray,
-        clip_eps: float,
-    ) -> jnp.ndarray:
-        """Compute the policy loss based on the advantages.
-
-        Args:
-            policy (distrax.Categorical): policy distribution.
-            traj_batch (Transition): pytree of trajectory data.
-            advantages (jnp.ndarray): advantages of the actor.
-            clip_eps (float): epsilon parameter for PPO clipping.
-
-        Returns:
-            (jnp.ndarray): scalar loss represented as 0D jax array.
-        """
-        log_prob = pi.log_prob(traj_batch.action)
-        ratio = jnp.exp(log_prob - traj_batch.log_prob)
-
-        # clipped surrogate objectives
-        unclipped = ratio * advantages
-        clipped = jnp.clip(ratio, 1 - clip_eps, 1 + clip_eps) * advantages
-        return -jnp.mean(jnp.minimum(unclipped, clipped))
-
-    def _value_loss(baseline, value, targets, clip_eps):
-        """Compute the value loss based on the targets.
-
-        Args:
-            baseline (jnp.ndarray): value predictions from the behavior (old) policy used during rollout.
-            value (jnp.ndarray): value predictions from the current critic network.
-            targets (jnp.ndarray): target value estimates (e.g. returns or GAE targets).
-            clip_eps (float): epsilon parameter for PPO clipping.
-
-        Returns:
-            (jnp.ndarray): scalar loss represented as 0D jax array.
-        """
-        value_pred_clipped = baseline + (value - baseline).clip(-clip_eps, clip_eps)
-        val_losses_unclipped = jnp.square(value - targets)
-        val_losses_clipped = jnp.square(value_pred_clipped - targets)
-        val_loss = 0.5 * jnp.maximum(val_losses_unclipped, val_losses_clipped).mean()
-        return val_loss
-
-    pi, val_ind, val_col = network_used.apply(params, traj_batch.obs)
-    loss_actor_ind = _policy_loss(pi, traj_batch, advantages_ind, clip_eps)
-    loss_actor_col = _policy_loss(pi, traj_batch, advantages_col, clip_eps)
-    loss_critic_ind = _value_loss(traj_batch.value, val_ind, targets_ind, clip_eps)
-    loss_critic_col = _value_loss(traj_batch.value, val_col, targets_col, clip_eps)
-
-    losses = loss_actor_ind, loss_actor_col, loss_critic_ind, loss_critic_col
-    aux = (sum(losses), val_ind, val_col)
-    return (losses, aux)
-
-
-def compute_fcgrad_jacobian(
-    params: PyTree,
-    traj_batch: PyTree,
-    adv_ind: jnp.ndarray,
-    adv_col: jnp.ndarray,
-    targets_ind: jnp.ndarray,
-    targets_col: jnp.ndarray,
-    clip_eps: float,
-    beta: float,
-    network_used,
-) -> tuple[PyTree, float]:
-    """Compute the gradients and total loss update. Actor gradients are
-    computed by using advantage-based policy gradient estimation. Critic
-    gradients are computed using value function regression based on targets.
-    Losses make use of PPO clipping for stable updates.
-
-    Note:
-        This function prevents going through the forward pass multiple times
-        by computing the jacobian (all losses w.r.t. params) instead. Since the
-        losses are scalars, the shape of the jacobian is [4 x #params].
-
-        This function might still take longer to compute than compute_fcgrad(),
-        because compiling will take longer. Also, performing multiple forward
-        passes in each minibatch is probably not as expensive as I think.
-
-    Args:
-        params (PyTree): parameters of the ActorCritic network.
-        traj_batch (Transition): batch of trajectories.
-        adv_ind (jnp.ndarray): batch of individual advantages.
-        adv_col (jnp.ndarray): batch of collective advantages.
-        targets_ind (jnp.ndarray): batch of individual targets.
-        targets_col (jnp.ndarray): batch of collective targets.
-        clip_eps (float): epsilon parameter for PPO clipping.
-        beta (float): beta parameter for FCGrad beta weighting.
-        network_used: ActorCritic network for the forward pass.
-
-    Returns:
-        A tuple containing:
-            - grads (for actor/critic for individual/collective objective).
-            - total_loss
-    """
-    # Compute the actor and critic losses.
-    loss_fn = jax.jacrev(combined_losses, has_aux=True)
-    jacobian, aux = loss_fn(
-        params,
-        traj_batch,
-        adv_ind,
-        adv_col,
-        targets_ind,
-        targets_col,
-        clip_eps,
-        network_used,
-    )
-    g_actor_ind, g_actor_col, g_critic_ind, g_critic_col = jacobian
-    total_loss, val_ind, val_col = aux
-
-    # Apply FCGrad to each sample in the minibatch.
-    grads_fn = jax.vmap(fcgrad_adjust, in_axes=(None, None, 0, 0, None))
-    g_actor_per_sample = grads_fn(g_actor_ind, g_actor_col, val_ind, val_col, beta)
-
-    # Aggregate actor gradients by taking the mean.
-    g_actor = jax.tree_map(lambda x: jnp.mean(x, axis=0), g_actor_per_sample)
-
-    grads = jax.tree_map(lambda a, b, c: a + b + c, g_actor, g_critic_ind, g_critic_col)
-    return grads, total_loss
 
 
 def policy_loss(
@@ -432,25 +244,32 @@ def compute_fcgrad(
             - grads (for actor/critic for individual/collective objective).
             - total_loss
     """
-    # Actor gradients/loss.
+    # Actor gradients/loss. Retrieve per-sample returns
     actor_grad_fn = jax.value_and_grad(policy_loss, has_aux=True)
-    (loss_actor_ind, v_ind), g_ind = actor_grad_fn(params, traj_batch, adv_ind, clip_eps, network, True)
-    (loss_actor_col, v_col), g_col = actor_grad_fn(params, traj_batch, adv_col, clip_eps, network, False)
+    (loss_actor_ind, returns_ind), g_ind = actor_grad_fn(params, traj_batch, adv_ind, clip_eps, network, True)
+    (loss_actor_col, returns_col), g_col = actor_grad_fn(params, traj_batch, adv_col, clip_eps, network, False)
+    g_actor_ind = g_ind["params"][network.actor_head]
+    g_actor_col = g_col["params"][network.actor_head]
 
-    # Vectorize FCGrad adjustment for each value sample in batch.
-    grads_fn = jax.vmap(fcgrad_adjust, in_axes=(None, None, 0, 0, None))
-    g_actor_per_sample = grads_fn(g_ind, g_col, v_ind, v_col, beta)
-
-    # Aggregate actor gradients by taking the mean.
-    g_actor = jax.tree_map(lambda x: jnp.mean(x, axis=0), g_actor_per_sample)
+    # FCGrad uses the expected returns, not the per-sample returns.
+    val_ind = jnp.mean(returns_ind)
+    val_col = jnp.mean(returns_col)
+    g_actor = fcgrad_adjust(g_actor_ind, g_actor_col, val_ind, val_col, beta)
 
     # Critic gradients/loss
     critic_grad_fn = jax.value_and_grad(value_loss)
     loss_critic_ind, g_critic_ind = critic_grad_fn(params, traj_batch, targets_ind, clip_eps, network, True)
     loss_critic_col, g_critic_col = critic_grad_fn(params, traj_batch, targets_col, clip_eps, network, False)
+    g_critic_ind = g_critic_ind["params"][network.critic_head_ind]
+    g_critic_col = g_critic_col["params"][network.critic_head_col]
+
+    # Combine the gradients.
+    grads = params.copy()
+    grads["params"][network.actor_head] = g_actor
+    grads["params"][network.critic_head_ind] = g_critic_ind
+    grads["params"][network.critic_head_col] = g_critic_col
 
     # Combining gradients/loss (they should have zeroes for other heads).
-    grads = jax.tree_map(lambda a, b, c: a + b + c, g_actor, g_critic_ind, g_critic_col)
     total_loss = loss_actor_ind + loss_actor_col + loss_critic_ind + loss_critic_col
     return grads, total_loss
 
