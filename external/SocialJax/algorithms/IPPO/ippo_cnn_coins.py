@@ -238,14 +238,14 @@ def compute_rollout_returns(
     return rollout_returns
 
 
-def compute_returns(rewards, values, dones, gamma=0.99) -> jnp.ndarray:
+def compute_returns(rewards, dones, last_value, gamma=0.99) -> jnp.ndarray:
     """
     Compute returns with discounts (gamma).
 
     Args:
         rewards: training rewards, shape (num_steps, num_actors).
-        values: network values for action, shape (num_steps, num_actors).
         dones: bool flags indicating if episode ended (num_steps, num_actors).
+        last_val: last value in batch.
         gamma: discount factor.
 
     Returns:
@@ -260,7 +260,6 @@ def compute_returns(rewards, values, dones, gamma=0.99) -> jnp.ndarray:
         return ret, ret
 
     # start from the last step (bootstrapped)
-    last_value = values[-1]
     _, returns = jax.lax.scan(
         scan_fn,
         last_value,
@@ -268,33 +267,6 @@ def compute_returns(rewards, values, dones, gamma=0.99) -> jnp.ndarray:
         reverse=True
     )
     return returns
-
-
-def compute_expected_returns(
-    traj_batch: Transition,
-    gamma: float,
-    individual: bool = True,
-) -> jnp.ndarray:
-    """
-    Compute expected returns with discounts (gamma).
-
-    Args:
-        rewards: training rewards, shape (num_steps, num_actors).
-        values: network values for action, shape (num_steps, num_actors).
-        dones: bool flags indicating if episode ended (num_steps, num_actors).
-        gamma: discount factor.
-        individual: use individual or collective rewards/values.
-
-    Returns:
-        returns computed under the initial state distribution.
-    """
-    returns = compute_returns(
-        rewards=traj_batch.reward_ind if individual else traj_batch.reward_col,
-        values=traj_batch.value_ind if individual else traj_batch.value_col,
-        dones=traj_batch.done,
-        gamma=gamma,
-    )
-    return jnp.mean(returns)
 
 
 # =============================================================================
@@ -537,13 +509,6 @@ def make_train(config: Dict, pbar: Optional[tqdm] = None):
             train_state, env_state, last_obs, update_step, rng = runner_state
 
             # -----------------------------------------------------------------
-            # Compute Returns
-            # -----------------------------------------------------------------
-
-            returns_ind = compute_expected_returns(traj_batch, config["GAMMA"])
-            returns_col = compute_expected_returns(traj_batch, config["GAMMA"], False)
-
-            # -----------------------------------------------------------------
             # Compute Advantages
             # -----------------------------------------------------------------
 
@@ -562,6 +527,26 @@ def make_train(config: Dict, pbar: Optional[tqdm] = None):
             )
 
             # -----------------------------------------------------------------
+            # Compute Returns
+            # -----------------------------------------------------------------
+
+            # Collect trajectories and compute backwards from last value.
+            # Shape: (num_envs, num_agents)
+            returns_ind = compute_returns(
+                rewards=traj_batch.reward_ind,
+                dones=traj_batch.done,
+                last_value=last_val_ind,
+                gamma=config["GAMMA"],
+            )
+
+            returns_col = compute_returns(
+                rewards=traj_batch.reward_col,
+                dones=traj_batch.done,
+                last_value=last_val_col,
+                gamma=config["GAMMA"],
+            )
+
+            # -----------------------------------------------------------------
             # Policy Update
             # -----------------------------------------------------------------
 
@@ -573,7 +558,7 @@ def make_train(config: Dict, pbar: Optional[tqdm] = None):
                         grads, total_loss = compute_fcgrad(
                             train_state.params,
                             traj_batch,
-                            returns_ind, returns_col,
+                            jnp.mean(returns_ind), jnp.mean(returns_col),
                             adv_ind, adv_col,
                             tgt_ind, tgt_col,
                             config["CLIP_EPS"],
