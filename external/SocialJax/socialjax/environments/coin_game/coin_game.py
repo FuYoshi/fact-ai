@@ -968,7 +968,9 @@ class CoinGame(MultiAgentEnv):
                 rewards = rewards.at[0, 0].set(red_reward[0])
                 rewards = rewards.at[1, 0].set(green_reward[0])
                 rewards = rewards * self.num_agents
-                info = {}
+                info = {
+                    "original_rewards": rewards.squeeze(),
+                }
             
             eat_own_coins = jnp.zeros((2, 1))
             red_reward, green_reward = 0, 0
