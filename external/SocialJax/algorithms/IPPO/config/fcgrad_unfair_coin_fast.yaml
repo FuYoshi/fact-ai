@@ -24,7 +24,7 @@
 # PPO hyperparameters (reduced for faster training)
 "NUM_ENVS": 128          # Reduced from 256 (2x fewer) - enough for stable gradients
 "NUM_STEPS": 500         # Reduced from 1000 (2x fewer)
-"TOTAL_TIMESTEPS": 5e7   # 50M timesteps - enough to see learning curves diverge
+"TOTAL_TIMESTEPS": 1e9   # 50M timesteps - enough to see learning curves diverge
 "UPDATE_EPOCHS": 2
 "NUM_MINIBATCHES": 64    # Reduced from 500 - still reasonable batch size
 "GAMMA": 0.99
@@ -37,7 +37,7 @@
 
 # Environment - Unfair Coin Game (moderately smaller grid for faster training)
 "ENV_NAME": "coin_game"
-"ENV_KWARGS": 
+"ENV_KWARGS":
   "num_agents": 2
   "num_inner_steps": 500      # Reduced from 1000 (2x fewer)
   "shared_rewards": False     # CRITICAL: Individual rewards only (FCGrad requirement)

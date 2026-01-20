@@ -481,11 +481,11 @@ def make_train(config: Dict, pbar: Optional[tqdm] = None):
                 reward_batch = batchify(reward, env.agents, num_actors).squeeze()
                 done_batch = batchify_dict(done, env.agents, num_actors).squeeze()
 
-                # Collective reward is the average of the mean reward.
-                # Repeat it so that each agent has the corresponding collective reward
+                # Collective reward is the mean across agents for each env.
+                # Tile to match agent-major order: [a0_e0, a0_e1, ..., a1_e0, a1_e1, ...]
                 # reward shape: (num_envs, num_agents)
-                reward_col_env = jnp.mean(reward, axis=1)
-                reward_col = jnp.repeat(reward_col_env, repeats=num_agents, axis=0)
+                reward_col_env = jnp.mean(reward, axis=1)  # (num_envs,)
+                reward_col = jnp.tile(reward_col_env, num_agents)  # (num_actors,)
 
                 transition = Transition(
                     done=done_batch,
