@@ -213,6 +213,8 @@ def value_loss(
 def compute_fcgrad(
     params: PyTree,
     traj,
+    ret_ind: jnp.ndarray,
+    ret_col: jnp.ndarray,
     adv_ind: jnp.ndarray,
     adv_col: jnp.ndarray,
     tgt_ind: jnp.ndarray,
@@ -229,6 +231,8 @@ def compute_fcgrad(
     Args:
         params (PyTree): parameters of the ActorCritic network.
         traj (Transition): batch of trajectories.
+        ret_ind (jnp.ndarray): expected individual return.
+        ret_col (jnp.ndarray): expected collective return.
         adv_ind (jnp.ndarray): batch of individual advantages.
         adv_col (jnp.ndarray): batch of collective advantages.
         tgt_ind (jnp.ndarray): batch of individual targets.
@@ -249,12 +253,11 @@ def compute_fcgrad(
     l_actor_col, g_actor_col = actor_grad_fn(params, traj, adv_col, clip_eps, network)
 
     # Perform FCGrad on the policy gradients (emb + actor).
-    # V_ind, V_col are the expected returns.
     g_actor = fcgrad_adjust(
         g_ind=g_actor_ind,
         g_col=g_actor_col,
-        val_ind=jnp.mean(traj.reward_ind),  # TODO: should we use discounting?
-        val_col=jnp.mean(traj.reward_col),  # TODO: should we use discounting?
+        val_ind=ret_ind,
+        val_col=ret_col,
         beta=beta,
     )
 
