@@ -238,7 +238,7 @@ def compute_rollout_returns(
     return rollout_returns
 
 
-def compute_returns(rewards, dones, last_value, gamma=0.99) -> jnp.ndarray:
+def compute_discounted_returns(rewards, dones, last_value, gamma=0.99) -> jnp.ndarray:
     """
     Compute returns with discounts (gamma).
 
@@ -266,6 +266,7 @@ def compute_returns(rewards, dones, last_value, gamma=0.99) -> jnp.ndarray:
         (rewards, dones),
         reverse=True
     )
+    # TODO: might have to reverse result if you want to plot.
     return returns
 
 
@@ -532,14 +533,14 @@ def make_train(config: Dict, pbar: Optional[tqdm] = None):
 
             # Collect trajectories and compute backwards from last value.
             # Shape: (num_envs, num_agents)
-            returns_ind = compute_returns(
+            dis_returns_ind = compute_discounted_returns(
                 rewards=traj_batch.reward_ind,
                 dones=traj_batch.done,
                 last_value=last_val_ind,
                 gamma=config["GAMMA"],
             )
 
-            returns_col = compute_returns(
+            dis_returns_col = compute_discounted_returns(
                 rewards=traj_batch.reward_col,
                 dones=traj_batch.done,
                 last_value=last_val_col,
@@ -555,10 +556,10 @@ def make_train(config: Dict, pbar: Optional[tqdm] = None):
                     traj_batch, adv_ind, adv_col, tgt_ind, tgt_col = batch_info
 
                     if config.get("FCGRAD", False):
-                        grads, total_loss = compute_fcgrad(
+                        grads, loss_info = compute_fcgrad(
                             train_state.params,
                             traj_batch,
-                            jnp.mean(returns_ind), jnp.mean(returns_col),
+                            jnp.mean(dis_returns_ind), jnp.mean(dis_returns_col),
                             adv_ind, adv_col,
                             tgt_ind, tgt_col,
                             config["CLIP_EPS"],
@@ -567,7 +568,7 @@ def make_train(config: Dict, pbar: Optional[tqdm] = None):
                         )
                     else:
                         grad_fn = jax.value_and_grad(ppo_loss, has_aux=True)
-                        (total_loss, aux), grads = grad_fn(
+                        (loss_ppo, aux), grads = grad_fn(
                             train_state.params,
                             traj_batch,
                             adv_ind, tgt_ind,
@@ -576,9 +577,10 @@ def make_train(config: Dict, pbar: Optional[tqdm] = None):
                             config["ENT_COEF"],
                             network
                         )
+                        loss_info = {"loss_ppo": loss_ppo}
 
                     train_state = train_state.apply_gradients(grads=grads)
-                    return train_state, total_loss
+                    return train_state, loss_info
 
                 train_state, traj_batch, adv_ind, adv_col, tgt_ind, tgt_col, rng = update_state
                 rng, perm_rng = jax.random.split(rng)
@@ -599,12 +601,12 @@ def make_train(config: Dict, pbar: Optional[tqdm] = None):
                     shuffled_batch,
                 )
 
-                train_state, total_loss = jax.lax.scan(
+                train_state, loss_info = jax.lax.scan(
                     _update_minibatch, train_state, minibatches
                 )
 
                 update_state = (train_state, traj_batch, adv_ind, adv_col, tgt_ind, tgt_col, rng)
-                return update_state, total_loss
+                return update_state, loss_info
 
             update_state = (train_state, traj_batch, advantages_ind, advantages_col,
                            targets_ind, targets_col, rng)
@@ -628,13 +630,18 @@ def make_train(config: Dict, pbar: Optional[tqdm] = None):
                 use_original=use_shared_rewards
             )
 
+            # TODO: do we have to track collective fairness metrics?
             # Compute fairness metrics
             fairness = compute_fairness_metrics(rollout_returns)
 
             # Average other metrics
             metric = jax.tree_map(lambda x: x.mean(), traj_batch.info)
 
-            # Add fairness metrics
+            # Aggregate over loss info for loss metrics.
+            loss_metrics = jax.tree_map(lambda x: x.mean(), loss_info)
+
+            # Add fairness metrics and loss metrics.
+            metric.update(loss_metrics)
             metric.update(fairness)
             for i in range(num_agents):
                 metric[f"agent_{i}_return"] = rollout_returns[i]

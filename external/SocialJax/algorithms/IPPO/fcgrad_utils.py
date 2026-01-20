@@ -130,7 +130,6 @@ def fcgrad_adjust(
 
     def _aligned(_):
         return beta_weighting(g_ind, g_col, beta)
-        # TODO: if g_ind (g_col) is zero, then use g_col (g_ind). Does not early stop
 
     def _conflict(_):
         return jax.lax.cond(
@@ -203,6 +202,7 @@ def value_loss(
     value = val_ind if individual else val_col
     baseline = traj_batch.value_ind if individual else traj_batch.value_col
 
+    # TODO: do we have to clip here?
     value_pred_clipped = baseline + (value - baseline).clip(-clip_eps, clip_eps)
     val_losses_unclipped = jnp.square(value - targets)
     val_losses_clipped = jnp.square(value_pred_clipped - targets)
@@ -222,7 +222,7 @@ def compute_fcgrad(
     clip_eps: float,
     beta: float,
     network,
-) -> tuple[PyTree, float]:
+) -> tuple[PyTree, dict]:
     """Compute the gradients and total loss update. Actor gradients are
     computed by using advantage-based policy gradient estimation. Critic
     gradients are computed using value function regression based on targets.
@@ -244,7 +244,7 @@ def compute_fcgrad(
     Returns:
         A tuple containing:
             - grads (for actor/critic for individual/collective objective).
-            - total_loss
+            - loss_info (dict with all losses)
     """
     # Compute the loss/gradient for forward pass on embedding + actor head.
     # Gradients w.r.t. critic heads is zero.
@@ -267,10 +267,16 @@ def compute_fcgrad(
     l_critic_ind, g_critic_ind = grad_fn(params, traj, tgt_ind, clip_eps, network, True)
     l_critic_col, g_critic_col = grad_fn(params, traj, tgt_col, clip_eps, network, False)
 
-    # Combine the gradients/losses. Update embedder using the sum of other gradients.
+    # Combine the gradients. Update embedder using the sum of other gradients.
     grads = jax.tree_map(lambda a, b, c: a + b + c, g_actor, g_critic_ind, g_critic_col)
-    loss_total = l_actor_ind + l_actor_col + l_critic_ind + l_critic_col
-    return grads, loss_total
+    loss_info = {
+        "loss_actor_individual": l_actor_ind,
+        "loss_actor_collective": l_actor_col,
+        "loss_critic_individual": l_critic_ind,
+        "loss_critic_collective": l_critic_col,
+        "loss_total": l_actor_ind + l_actor_col + l_critic_ind + l_critic_col,
+    }
+    return grads, loss_info
 
 
 # ===================================================
