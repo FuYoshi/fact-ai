@@ -383,7 +383,7 @@ def make_train(config: Dict, pbar: Optional[tqdm] = None):
 
     num_agents = env.num_agents
     num_envs = config["NUM_ENVS"]
-    num_actors = num_agents * num_envs if config["PARAMETER_SHARING"] else num_envs
+    num_actors = num_agents * num_envs  # Always num_agents * num_envs regardless of parameter sharing
 
     # Compute derived config values
     config["NUM_ACTORS"] = num_actors
