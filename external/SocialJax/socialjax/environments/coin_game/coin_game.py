@@ -160,7 +160,7 @@ class CoinGame(MultiAgentEnv):
         num_agents=2,
         shared_rewards=True,
         payoff_matrix=[[1, 1, -2], [1, 1, -2]],
-        regrow_rate=0.001, #Changed from 0.0005
+        regrow_rate=0.002, #Changed from 0.0005
         inequity_aversion=False,
         inequity_aversion_target_agents=None,
         inequity_aversion_alpha=5,
