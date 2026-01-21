@@ -38,10 +38,10 @@
 # Environment - Unfair Coin Game (moderately smaller grid for faster training)
 "ENV_NAME": "coin_game"
 "ENV_KWARGS":
-  "num_agents": 2
+  "num_agents": 3
   "num_inner_steps": 500      # Reduced from 1000 (2x fewer)
   "shared_rewards": False     # CRITICAL: Individual rewards only (FCGrad requirement)
-  "green_coin_prob": 0.9375   # UNFAIR: 15/16 green, 1/16 red
+  "coin_probs": [0.9375, 0.03125, 0.03125]   # UNFAIR: 15/16 agent 0, 1/32 each for agents 1 and 2
   "grid_size": [12, 8]        # Moderately smaller: 12x8 (was 16x11) - preserves dynamics
   "obs_size": 9               # Slightly smaller observation window (was 11)
   "cnn": True
@@ -56,7 +56,7 @@
 "NUM_SEEDS": 1
 "REWARD": "individual"        # Individual rewards (FCGrad requirement)
 "GIF_NUM_FRAMES": 250
-"PARAMETER_SHARING": True
+"PARAMETER_SHARING": False
 "TUNE": False
 
 # FCGrad settings - ENABLED
