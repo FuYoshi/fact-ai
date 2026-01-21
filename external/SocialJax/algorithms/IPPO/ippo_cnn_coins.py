@@ -897,9 +897,26 @@ def make_train(config: Dict, pbar: Optional[tqdm] = None):
 # Evaluation and Checkpointing
 # =============================================================================
 
-def save_params(train_state, save_path: str, parameter_sharing: bool = True):
+def get_params_save_path(
+    config,
+    save_dir: str = "./checkpoints",
+) -> Path:
+    """Save path for the parameters of the model using config."""
+    filename = config.get("SAVE_PARAMS_AS", "ippo_cnn_coins")
+    seed = config["SEED"]
+
+    # uses filename from config, could maybe add hash of config
+    save_path = Path(save_dir) / f"{filename}_seed_{seed}.pkl"
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    return save_path
+
+
+def save_params(train_state, save_path: Path, parameter_sharing: bool = True):
     """Save model parameters to file."""
-    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    save_path = Path(save_path)
+    save_path.parent.mkdir(parents=True, exist_ok=True)  # ensures folder exists
+
+    # os.makedirs(os.path.dirname(save_path), exist_ok=True)
     if parameter_sharing:
         params = jax.tree_util.tree_map(lambda x: np.array(x), train_state.params)
     else:
@@ -909,10 +926,12 @@ def save_params(train_state, save_path: str, parameter_sharing: bool = True):
         pickle.dump(params, f)
 
 
-def load_params(load_path: str, parameter_sharing: bool = True):
+def load_params(load_path: Path, parameter_sharing: bool = True):
     """Load model parameters from file."""
+    load_path = Path(load_path)
     with open(load_path, 'rb') as f:
         params = pickle.load(f)
+
     if parameter_sharing:
         return jax.tree_util.tree_map(lambda x: jnp.array(x), params)
     else:
