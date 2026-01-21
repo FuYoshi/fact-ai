@@ -4,6 +4,9 @@
 # Quick test version with reduced timesteps for wandb testing
 # =============================================================================
 
+# descriptive filename to save params as.
+"SAVE_PARAMS_AS": "quick_unfair_ind"
+
 # Learning rate
 "LR": 0.0005
 "ANNEAL_LR": True  # Disable annealing for quick test
@@ -24,7 +27,7 @@
 
 # Environment - Unfair Coin Game
 "ENV_NAME": "coin_game"
-"ENV_KWARGS": 
+"ENV_KWARGS":
   "num_agents": 2
   "num_inner_steps": 1000
   "shared_rewards": False     # Individual rewards

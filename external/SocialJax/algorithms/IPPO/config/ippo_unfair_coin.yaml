@@ -11,6 +11,9 @@
 # - Standard IPPO without FCGrad gradient adjustment
 # =============================================================================
 
+# descriptive filename to save params as.
+"SAVE_PARAMS_AS": "full_unfair_ippo"
+
 # Learning rate (paper: 1e-4 with linear annealing)
 "LR": 0.0001
 "ANNEAL_LR": True
@@ -31,7 +34,7 @@
 
 # Environment - Unfair Coin Game
 "ENV_NAME": "coin_game"
-"ENV_KWARGS": 
+"ENV_KWARGS":
   "num_agents": 2
   "num_inner_steps": 1000
   "shared_rewards": False     # CRITICAL: Individual rewards only

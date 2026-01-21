@@ -8,6 +8,9 @@
 # - Fewer timesteps and environments
 # =============================================================================
 
+# descriptive filename to save params as.
+"SAVE_PARAMS_AS": "fast_unfar_ind"
+
 # Learning rate (moderately increased for faster learning, but stable)
 "LR": 0.0005             # 5x higher than paper (0.0001) - more stable than 0.001
 "ANNEAL_LR": True
@@ -28,7 +31,7 @@
 
 # Environment - Unfair Coin Game (moderately smaller grid for faster training)
 "ENV_NAME": "coin_game"
-"ENV_KWARGS": 
+"ENV_KWARGS":
   "num_agents": 2
   "num_inner_steps": 500      # Reduced from 1000 (2x fewer)
   "shared_rewards": False     # Individual rewards only
