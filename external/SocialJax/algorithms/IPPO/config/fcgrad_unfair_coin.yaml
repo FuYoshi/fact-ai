@@ -48,7 +48,7 @@
 "SHAPING_BEGIN": 1e6
 
 # Training
-"SEED": 42
+"SEED": 44
 "NUM_SEEDS": 1
 "REWARD": "individual"
 "GIF_NUM_FRAMES": 250

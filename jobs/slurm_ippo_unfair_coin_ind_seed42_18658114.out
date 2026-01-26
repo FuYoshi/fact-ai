@@ -1,0 +1,56 @@
+==============================================
+  IPPO Unfair Coin Game (Individual) - Full Training
+==============================================
+Job ID: 18658114
+Node: gcn5
+Time limit: 10 hours
+Seed: 42
+
+Loading modules...
+Activating virtual environment...
+
+🔍 Verifying JAX GPU setup...
+   JAX 0.4.30, Backend: gpu, Devices: [cuda(id=0)]
+
+==============================================
+  Running: ippo_unfair_coin_ind
+  Config: Full paper experiment (1B timesteps)
+  Environment: Unfair Coin Game (green_coin_prob=0.9375)
+  Rewards: Individual (shared_rewards=False)
+  Seed: 42
+==============================================
+
+wandb: Currently logged in as: simonbruno (simonbruno-university-of-amsterdam) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: setting up run ublag8lj
+wandb: Tracking run with wandb version 0.23.1
+wandb: Run data is saved locally in /gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO/wandb/run-20260124_152657-ublag8lj
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run ippo_cnn_coins_seed42
+wandb: ⭐️ View project at https://wandb.ai/simonbruno-university-of-amsterdam/ippo-unfair-coin-test
+wandb: 🚀 View run at https://wandb.ai/simonbruno-university-of-amsterdam/ippo-unfair-coin-test/runs/ublag8lj
+
+Starting training: 3906.0 updates, 1,000,000,000.0 timesteps
+Training:   0%|          | 0/3906.0 [00:00<?, ?update/s]Error executing job with overrides: []
+Traceback (most recent call last):
+  File "/gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO/ippo_cnn_coins.py", line 1067, in main
+    single_run(config)
+  File "/gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO/ippo_cnn_coins.py", line 1043, in single_run
+    train_fn = jax.jit(make_train(config, pbar=pbar))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO/ippo_cnn_coins.py", line 381, in make_train
+    env = socialjax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/socialjax/registration.py", line 46, in make
+    env = CoinGame(**env_kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^^
+TypeError: CoinGame.__init__() got an unexpected keyword argument 'green_coin_prob'
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
+[1;34mwandb[0m: 
+[1;34mwandb[0m: 🚀 View run [33mippo_cnn_coins_seed42[0m at: [34m[0m
+[1;34mwandb[0m: Find logs at: [1;35m../../../../../../../../gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO/wandb/run-20260124_152657-ublag8lj/logs[0m
+Training:   0%|          | 0/3906.0 [00:01<?, ?update/s]
+
+Training complete
+Check wandb project: ippo-unfair-coin-test
+Models saved to: checkpoints/

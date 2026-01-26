@@ -160,10 +160,8 @@ class CoinGame(MultiAgentEnv):
         num_outer_steps=1,
         num_agents=2,
         shared_rewards=True,
-        payoff_matrix=None,  # Deprecated: use picker_reward/owner_penalty instead
-        picker_reward=1,     # Reward for picking any coin
-        owner_penalty=-2,    # Penalty when your coin is picked by another agent
-        regrow_rate=0.001, #Changed from 0.0005
+        payoff_matrix=[[1, 1, -2], [1, 1, -2]],
+        regrow_rate=0.002, #Changed from 0.0005
         inequity_aversion=False,
         inequity_aversion_target_agents=None,
         inequity_aversion_alpha=5,

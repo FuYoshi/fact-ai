@@ -1,0 +1,62 @@
+==============================================
+  FCGrad Unfair Coin Game - 3 Agents (7:1:1)
+==============================================
+Job ID: 18606649
+Node: gcn2
+Time limit: 15 hours
+Agents: 3
+Coin probabilities: 7:1:1 (agent 0: 77.78%, agents 1&2: 11.11% each)
+
+Loading modules...
+Activating virtual environment...
+
+🔍 Verifying JAX GPU setup...
+   JAX 0.4.30, Backend: gpu, Devices: [cuda(id=0)]
+
+==============================================
+  Running: fcgrad_unfair_coin_3agents_711
+  Config: Full paper experiment (1B timesteps)
+  Environment: Unfair Coin Game
+  Agents: 3
+  Coin probabilities: 7:1:1
+==============================================
+
+wandb: Currently logged in as: simonbruno (simonbruno-university-of-amsterdam) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: setting up run mb647sbd
+wandb: Tracking run with wandb version 0.23.1
+wandb: Run data is saved locally in /gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO/wandb/run-20260122_175852-mb647sbd
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run ippo_cnn_coins_seed42
+wandb: ⭐️ View project at https://wandb.ai/simonbruno-university-of-amsterdam/ippo-unfair-coin-test
+wandb: 🚀 View run at https://wandb.ai/simonbruno-university-of-amsterdam/ippo-unfair-coin-test/runs/mb647sbd
+
+Starting training: 3906.0 updates, 1,000,000,000.0 timesteps
+Training:   0%|          | 0/3906.0 [00:00<?, ?update/s]/home/scur0012/.venvs/fcgrad/lib/python3.12/site-packages/jax/_src/ops/scatter.py:96: FutureWarning: scatter inputs have incompatible types: cannot safely cast value from dtype=int32 to dtype=int16 with jax_numpy_dtype_promotion='standard'. In future JAX releases this will result in an error.
+  warnings.warn(
+/gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO/ippo_cnn_coins.py:843: DeprecationWarning: jax.tree_map is deprecated: use jax.tree.map (jax v0.4.25 or newer) or jax.tree_util.tree_map (any JAX version).
+  metric = jax.tree_map(lambda x: x.mean(), traj_batch.info)
+/gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO/ippo_cnn_coins.py:846: DeprecationWarning: jax.tree_map is deprecated: use jax.tree.map (jax v0.4.25 or newer) or jax.tree_util.tree_map (any JAX version).
+  loss_metrics = jax.tree_map(lambda x: x.mean(), loss_info)
+2026-01-22 17:59:45.550421: W external/xla/xla/service/hlo_rematerialization.cc:3005] Can't reduce memory use below 13.97GiB (14997869104 bytes) by rematerialization; only reduced to 15.63GiB (16781924408 bytes), down from 15.63GiB (16781924408 bytes) originally
+2026-01-22 18:00:36.065747: W external/xla/xla/tsl/framework/bfc_allocator.cc:482] Allocator (GPU_0_bfc) ran out of memory trying to allocate 15.75GiB (rounded to 16907154432)requested by op 
+2026-01-22 18:00:36.066030: W external/xla/xla/tsl/framework/bfc_allocator.cc:494] *___________________________________________________________________________________________________
+E0122 18:00:36.066073 2102372 pjrt_stream_executor_client.cc:2985] Execution of replica 0 failed: RESOURCE_EXHAUSTED: Out of memory while trying to allocate 16907154208 bytes.
+Error executing job with overrides: []
+Traceback (most recent call last):
+  File "/gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO/ippo_cnn_coins.py", line 1067, in main
+    single_run(config)
+  File "/gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO/ippo_cnn_coins.py", line 1044, in single_run
+    out = jax.vmap(train_fn)(rngs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^
+jaxlib.xla_extension.XlaRuntimeError: RESOURCE_EXHAUSTED: Out of memory while trying to allocate 16907154208 bytes.
+--------------------
+For simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
+[1;34mwandb[0m: 
+[1;34mwandb[0m: 🚀 View run [33mippo_cnn_coins_seed42[0m at: [34m[0m
+[1;34mwandb[0m: Find logs at: [1;35m../../../../../../../../gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO/wandb/run-20260122_175852-mb647sbd/logs[0m
+
+Training complete
+Check wandb project: ippo-unfair-coin-test
+Models saved to: checkpoints/
