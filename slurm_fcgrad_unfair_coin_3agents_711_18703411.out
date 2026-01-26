@@ -1,0 +1,30 @@
+==============================================
+  FCGrad Unfair Coin Game - 3 Agents (7:1:1)
+==============================================
+Job ID: 18703411
+Node: gcn98
+Time limit: 20 hours
+Agents: 3
+Coin probabilities: 7:1:1 (agent 0: 77.78%, agents 1&2: 11.11% each)
+
+Loading modules...
+Activating virtual environment...
+
+🔍 Verifying JAX GPU setup...
+2026-01-26 18:14:30.626049: F external/xla/xla/parse_flags_from_env.cc:224] Unknown flags in XLA_FLAGS: --xla_gpu_enable_async_collectives=true  --xla_gpu_enable_latency_hiding_scheduler=true --xla_gpu_enable_highest_priority_async_stream=true 
+/var/spool/slurm/slurmd/job18703411/slurm_script: line 49: 3044879 Aborted                 python -c "import jax; print(f'   JAX {jax.__version__}, Backend: {jax.default_backend()}, Devices: {jax.devices()}')"
+
+==============================================
+  Running: fcgrad_unfair_coin_3agents_711
+  Config: Full paper experiment (1B timesteps)
+  Environment: Unfair Coin Game
+  Agents: 3
+  Coin probabilities: 7:1:1
+==============================================
+
+2026-01-26 18:14:38.424417: F external/xla/xla/parse_flags_from_env.cc:224] Unknown flags in XLA_FLAGS: --xla_gpu_enable_async_collectives=true  --xla_gpu_enable_latency_hiding_scheduler=true --xla_gpu_enable_highest_priority_async_stream=true 
+/var/spool/slurm/slurmd/job18703411/slurm_script: line 65: 3045048 Aborted                 python ippo_cnn_coins.py --config-name=fcgrad_unfair_coin_3agents_711
+
+Training complete
+Check wandb project: ippo-unfair-coin-test
+Models saved to: checkpoints/
