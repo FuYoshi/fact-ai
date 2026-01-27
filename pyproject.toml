@@ -5,22 +5,25 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
 dependencies = [
-    # Updated JAX versions for cuDNN 9.x and CUDA 12.6 support
-    "jax>=0.4.30",
-    "jaxlib>=0.4.30",
-    "chex==0.1.84",
-    "distrax==0.1.5",
-    "flax==0.7.4",
-    "numpy==1.26.4",
-    "optax==0.1.7",
-    "scipy==1.12.0",
+    # JAX ecosystem - compatible versions
+    "jax>=0.4.25,<0.4.31",
+    "jaxlib>=0.4.25,<0.4.31",
+    "chex>=0.1.8",
+    "distrax>=0.1.5",
+    "flax>=0.8.0,<0.9.0",
+    "numpy>=1.24.0,<2.0.0",
+    "optax>=0.1.7",
+    "scipy>=1.12.0",
     # SocialJax dependencies
-    "gymnax==0.0.8",
-    "hydra-core==1.3.2",
-    "wandb==0.18.5",
-    "jaxmarl==0.0.7",
-    "gymnasium==1.0.0",
-    "dm-env==1.6",
-    "dm-tree==0.1.8",
+    "gymnax>=0.0.6",
+    "hydra-core>=1.3.2",
+    "wandb>=0.16.0",
+    "gymnasium>=0.29.0",
+    "dm-env>=1.6",
+    "dm-tree>=0.1.8",
     "omegaconf>=2.3.0",
+    # Rendering and utilities
+    "pillow>=9.0.0",
+    "tqdm>=4.64.0",
+    "safetensors>=0.4.0",
 ]

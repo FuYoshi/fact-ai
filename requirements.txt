@@ -1,33 +1,31 @@
 # FCGrad: Fair Cooperation in Mixed-Motive Games via Conflict-Aware Gradient Adjustment
 # Reproducibility Study Requirements
 #
-# For GPU support (CUDA 12.x):
-#   pip install -U "jax[cuda12]"
-# For CPU-only:
-#   pip install jax jaxlib
+# Install with: pip install -r requirements.txt
+# Or use uv: uv sync
 
-# Core JAX/ML dependencies
-jax>=0.4.30
-jaxlib>=0.4.30
-chex==0.1.84
-distrax==0.1.5
-flax==0.7.4
-numpy==1.26.4
-optax==0.1.7
-scipy==1.12.0
+# JAX ecosystem (pinned for compatibility)
+jax>=0.4.25,<0.4.31
+jaxlib>=0.4.25,<0.4.31
+chex>=0.1.8
+distrax>=0.1.5
+flax>=0.8.0,<0.9.0
+numpy>=1.24.0,<2.0.0
+optax>=0.1.7
+scipy>=1.12.0
 
 # Environment and RL dependencies
-gymnax==0.0.8
-jaxmarl==0.0.7
-gymnasium==1.0.0
-dm-env==1.6
-dm-tree==0.1.8
+gymnax>=0.0.6
+gymnasium>=0.29.0
+dm-env>=1.6
+dm-tree>=0.1.8
 
 # Configuration and logging
-hydra-core==1.3.2
+hydra-core>=1.3.2
 omegaconf>=2.3.0
-wandb==0.18.5
+wandb>=0.16.0
 
-# Visualization (for evaluation GIFs)
+# Utilities
 pillow>=9.0.0
-matplotlib>=3.5.0
+tqdm>=4.64.0
+safetensors>=0.4.0

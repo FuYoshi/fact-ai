@@ -1043,7 +1043,7 @@ class CoinGame(MultiAgentEnv):
             grid = jnp.zeros((self.GRID_SIZE_ROW, self.GRID_SIZE_COL), jnp.int16)
 
 
-            agent_pos = jax.random.permutation(subkey, self.SPAWNS_PLAYERS)
+            agent_pos = jax.random.permutation(subkey, self.SPAWNS_PLAYERS)[:num_agents]
 
             apple_pos = self.SPAWNS_APPLE
 

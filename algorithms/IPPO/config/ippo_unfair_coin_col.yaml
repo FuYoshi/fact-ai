@@ -39,7 +39,7 @@
   "num_agents": 2
   "num_inner_steps": 1000
   "shared_rewards": True      # CRITICAL: Collective rewards (mean of individual)
-  "green_coin_prob": 0.9375   # UNFAIR: 15/16 green, 1/16 red (paper setting)
+  "coin_probs": [0.9375, 0.0625]   # UNFAIR: 15/16 agent 0, 1/16 agent 1 (paper setting)
   "cnn": True
   "jit": True
 
@@ -62,7 +62,7 @@
 
 # WandB
 "ENTITY": ""
-"PROJECT": "fcgrad-unfair-coin"
+"PROJECT": "ippo-unfair-coin-test"
 "WANDB_MODE": "online"
 "WANDB_TAGS":
   - IPPO
