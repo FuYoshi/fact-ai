@@ -1,0 +1,45 @@
+==============================================
+  FCGrad Unfair Coin Game - 3 Agents (7:1:1)
+  Seed: 43
+==============================================
+Job ID: 18741620
+Node: gcn139
+Time limit: 20 hours
+Agents: 3
+Coin probabilities: 7:1:1 (agent 0: 77.78%, agents 1&2: 11.11% each)
+Seed: 43
+
+Loading modules...
+Activating virtual environment...
+
+🔍 Verifying JAX GPU setup...
+   JAX 0.4.30, Backend: gpu, Devices: [cuda(id=0)]
+
+==============================================
+  Running: fcgrad_unfair_coin_3agents_711
+  Config: Full paper experiment (1B timesteps)
+  Environment: Unfair Coin Game
+  Agents: 3
+  Coin probabilities: 7:1:1
+  Seed: 43
+==============================================
+
+wandb: Currently logged in as: simonbruno (simonbruno-university-of-amsterdam) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: setting up run p41az6la
+wandb: Tracking run with wandb version 0.23.1
+wandb: Run data is saved locally in /gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO/wandb/run-20260127_143030-p41az6la
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run ippo_cnn_coins_seed43
+wandb: ⭐️ View project at https://wandb.ai/simonbruno-university-of-amsterdam/ippo-unfair-coin-test
+wandb: 🚀 View run at https://wandb.ai/simonbruno-university-of-amsterdam/ippo-unfair-coin-test/runs/p41az6la
+
+Starting training: 3906.0 updates, 1,000,000,000.0 timesteps
+Training:   0%|          | 0/3906.0 [00:00<?, ?update/s]/home/scur0012/.venvs/fcgrad/lib/python3.12/site-packages/jax/_src/ops/scatter.py:96: FutureWarning: scatter inputs have incompatible types: cannot safely cast value from dtype=int32 to dtype=int16 with jax_numpy_dtype_promotion='standard'. In future JAX releases this will result in an error.
+  warnings.warn(
+/gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO/ippo_cnn_coins.py:843: DeprecationWarning: jax.tree_map is deprecated: use jax.tree.map (jax v0.4.25 or newer) or jax.tree_util.tree_map (any JAX version).
+  metric = jax.tree_map(lambda x: x.mean(), traj_batch.info)
+/gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO/ippo_cnn_coins.py:846: DeprecationWarning: jax.tree_map is deprecated: use jax.tree.map (jax v0.4.25 or newer) or jax.tree_util.tree_map (any JAX version).
+  loss_metrics = jax.tree_map(lambda x: x.mean(), loss_info)
+/gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO/ippo_cnn_coins.py:868: DeprecationWarning: jax.tree_map is deprecated: use jax.tree.map (jax v0.4.25 or newer) or jax.tree_util.tree_map (any JAX version).
+  metric_converted = jax.tree_map(to_native, metric)
+Training:   0%|          | 1/3906.0 [01:12<78:39:36, 72.52s/update]Training:   0%|          | 1/3906.0 [01:12<78:39:36, 72.52s/update, return=-0.06, step=256000]Training:   0%|          | 2/3906.0 [01:18<78:38:24, 72.52s/update, return=-63.12, step=512000]Training:   0%|          | 3/3906.0 [01:24<78:37:11, 72.52s/update, return=-63.37, step=768000][2026-01-27T14:31:57.679] error: *** JOB 18741620 ON gcn139 CANCELLED AT 2026-01-27T14:31:57 DUE to SIGNAL Terminated ***

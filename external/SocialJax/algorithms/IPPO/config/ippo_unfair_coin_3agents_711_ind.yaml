@@ -1,0 +1,74 @@
+# =============================================================================
+# IPPO Baseline on Unfair Coin Game - 3 Agents with 7:1:1 spawn probabilities
+# Individual Rewards
+# =============================================================================
+# Baseline IPPO (without FCGrad) for the Unfair Coin Game experiment
+# Paper: "Fair Cooperation in Mixed-Motive Games via Conflict-Aware Gradient Adjustment"
+# by Woojun Kim and Katia Sycara (Carnegie Mellon University)
+#
+# This config matches the baseline experiment:
+# - 3 Agents with unfair coin distribution: 7:1:1 ratio
+# - Individual rewards (shared_rewards: False)
+# - Standard IPPO without FCGrad gradient adjustment
+# =============================================================================
+
+# descriptive filename to save params as.
+"SAVE_PARAMS_AS": "full_unfair_ind_3agents_711"
+
+# Learning rate (paper: 1e-4 with linear annealing)
+"LR": 0.0001
+"ANNEAL_LR": True
+
+# PPO hyperparameters (from paper Appendix B)
+"NUM_ENVS": 256
+"NUM_STEPS": 1000
+"TOTAL_TIMESTEPS": 1e9
+"UPDATE_EPOCHS": 2
+"NUM_MINIBATCHES": 500
+"GAMMA": 0.99
+"GAE_LAMBDA": 0.95
+"CLIP_EPS": 0.2
+"ENT_COEF": 0.1      # Paper: 0.1
+"VF_COEF": 0.1       # Paper: 0.1
+"MAX_GRAD_NORM": 0.5
+"ACTIVATION": "relu"
+
+# Environment - Unfair Coin Game (3 Agents)
+"ENV_NAME": "coin_game"
+"ENV_KWARGS":
+  "num_agents": 3
+  "num_inner_steps": 1000
+  "shared_rewards": False     # CRITICAL: Individual rewards only
+  "payoff_matrix": [[1, 1, -2], [1, 1, -2], [1, 1, -2]]  # Same payoff structure
+  "coin_probs": [0.7778, 0.1111, 0.1111]   # UNFAIR: 7:1:1 ratio (7/9 for agent 0, 1/9 each for agents 1 and 2)
+  "regrow_rate": 0.002
+  "cnn": True
+  "jit": True
+
+# Reward shaping (not used, but keep for compatibility)
+"REW_SHAPING_HORIZON": 2.5e6
+"SHAPING_BEGIN": 1e6
+
+# Training
+"SEED": 42
+"NUM_SEEDS": 1
+"REWARD": "individual"
+"GIF_NUM_FRAMES": 250
+"PARAMETER_SHARING": False
+"TUNE": False            # Set to True for hyperparameter sweep
+
+# FCGrad settings - DISABLED (this is the baseline)
+"FCGRAD": False              # Baseline IPPO without FCGrad
+"USE_DUAL_HEAD": False       # Single value head (standard IPPO)
+"FCGRAD_BETA": 0.5           # Not used when FCGRAD=False
+
+# WandB
+"ENTITY": ""
+"PROJECT": "ippo-unfair-coin-test"  # Note: Using shared team project (name is misleading but required for team access)
+"WANDB_MODE": "online"
+"WANDB_TAGS":
+  - IPPO
+  - BASELINE
+  - UNFAIR_COIN
+  - INDIVIDUAL_REWARD
+  - 3AGENTS

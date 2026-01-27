@@ -1023,13 +1023,30 @@ def single_run(config):
     """Run a single training experiment."""
     config = OmegaConf.to_container(config)
 
+    # Build descriptive run name
+    method = "fcgrad" if config.get("FCGRAD", False) else "ippo"
+    num_agents = config["ENV_KWARGS"].get("num_agents", 2)
+    reward_type = "col" if config["ENV_KWARGS"].get("shared_rewards", False) else "ind"
+    seed = config["SEED"]
+    
+    # Check if it's the 3-agent 7:1:1 setup
+    coin_probs = config["ENV_KWARGS"].get("coin_probs", None)
+    if coin_probs and len(coin_probs) == 3 and abs(coin_probs[0] - 0.7778) < 0.01:
+        agent_suffix = "_3agents_711"
+    elif num_agents == 3:
+        agent_suffix = "_3agents"
+    else:
+        agent_suffix = ""
+    
+    run_name = f'{method}{agent_suffix}_{reward_type}_seed{seed}'
+
     wandb.init(
         entity=config["ENTITY"],
         project=config["PROJECT"],
         tags=["IPPO", "FF"],
         config=config,
         mode=config["WANDB_MODE"],
-        name=f'ippo_cnn_coins_seed{config["SEED"]}'
+        name=run_name
     )
 
     num_updates = config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]

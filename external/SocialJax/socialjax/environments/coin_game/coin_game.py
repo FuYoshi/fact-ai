@@ -213,23 +213,22 @@ class CoinGame(MultiAgentEnv):
             # Legacy support: convert old 2x3 format to new NxN format
             # Old format: [[own_reward, other_reward, penalty], [own_reward, other_reward, penalty]]
             self.payoff_matrix = payoff_matrix  # Keep for backward compat
-            self.picker_reward_matrix = jnp.full((num_agents, num_agents), picker_reward)
+            # Extract values from payoff_matrix format: [own_reward, other_reward, penalty]
+            payoff_array = jnp.array(payoff_matrix[0])  # Use first agent's values (should be same for all)
+            other_reward = float(payoff_array[1])  # Reward for picking other's coin
+            penalty = float(payoff_array[2])  # Penalty when your coin is picked
+            # picker_reward_matrix: always other_reward for picking any coin
+            self.picker_reward_matrix = jnp.full((num_agents, num_agents), other_reward)
+            # owner_penalty_matrix: 0 on diagonal (no penalty for own coin), penalty off-diagonal
             self.owner_penalty_matrix = jnp.where(
                 ~jnp.eye(num_agents, dtype=bool),
-                jnp.full((num_agents, num_agents), owner_penalty),
+                jnp.full((num_agents, num_agents), penalty),
                 jnp.zeros((num_agents, num_agents))
             )
         else:
-            self.payoff_matrix = None
-            # picker_reward_matrix[i,j] = reward for agent i picking agent j's coin (always +picker_reward)
-            self.picker_reward_matrix = jnp.full((num_agents, num_agents), picker_reward)
-            # owner_penalty_matrix[i,j] = penalty for agent j when agent i picks j's coin
-            # Diagonal is 0 (no penalty for picking own coin), off-diagonal is owner_penalty
-            self.owner_penalty_matrix = jnp.where(
-                ~jnp.eye(num_agents, dtype=bool),
-                jnp.full((num_agents, num_agents), owner_penalty),
-                jnp.zeros((num_agents, num_agents))
-            )
+            # If payoff_matrix is None, we need picker_reward and owner_penalty parameters
+            # This branch should not be reached with current config, but kept for backward compat
+            raise ValueError("payoff_matrix must be provided. Use format: [[own_reward, other_reward, penalty], ...]")
 
         # Coin spawn probabilities (uniform by default)
         if coin_probs is None:
@@ -1170,7 +1169,10 @@ class CoinGame(MultiAgentEnv):
 
     # class Items(IntEnum):
 
-        if obj in self._agents:
+        if obj is None:
+            # Empty cell (cell == 0), do nothing (already filled with background color)
+            pass
+        elif obj in self._agents:
             # Draw the agent
             # Agent grid values are: COIN_BASE_ITEM + num_agents + agent_idx
             agent_color = self.PLAYER_COLOURS[obj - COIN_BASE_ITEM - self.num_agents]

@@ -1,0 +1,74 @@
+#!/bin/bash
+#SBATCH --partition=gpu_h100
+#SBATCH --gres=gpu:h100:1
+#SBATCH --job-name=IPPO_3Agents_711_col_s42
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=9
+#SBATCH --time=20:00:00          # 20 hours for full training
+#SBATCH --output=slurm_ippo_unfair_coin_3agents_711_col_seed42_%j.out
+
+# =============================================================================
+# Full Training Job - IPPO Unfair Coin Game (3 Agents, 7:1:1 probabilities)
+# Paper experiment: 1B timesteps with unfair coin distribution
+# 3 Agents: Agent 0 (77.78%), Agent 1 (11.11%), Agent 2 (11.11%)
+# Reward type: Collective
+# Seed: 42
+# Time limit: 20 hours
+# =============================================================================
+
+echo "=============================================="
+echo "  IPPO Unfair Coin Game - 3 Agents (7:1:1)"
+echo "  Reward type: Collective"
+echo "  Seed: 42"
+echo "=============================================="
+echo "Job ID: $SLURM_JOB_ID"
+echo "Node: $SLURMD_NODENAME"
+echo "Time limit: 20 hours"
+echo "Agents: 3"
+echo "Coin probabilities: 7:1:1 (agent 0: 77.78%, agents 1&2: 11.11% each)"
+echo "Reward type: Collective"
+echo "Seed: 42"
+echo ""
+
+# Load modules
+echo "Loading modules..."
+module purge
+module load 2024
+module load CUDA/12.6.0
+module load cuDNN/9.5.0.50-CUDA-12.6.0
+module load Python/3.12.3-GCCcore-13.3.0
+
+# Activate virtual environment
+echo "Activating virtual environment..."
+source ~/.venvs/fcgrad/bin/activate
+
+# Set XLA flags for JAX GPU
+export XLA_FLAGS="--xla_gpu_cuda_data_dir=$CUDA_HOME"
+
+# Verify setup
+echo ""
+echo "🔍 Verifying JAX GPU setup..."
+python -c "import jax; print(f'   JAX {jax.__version__}, Backend: {jax.default_backend()}, Devices: {jax.devices()}')"
+
+# Navigate to IPPO directory
+cd ~/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO
+
+echo ""
+echo "=============================================="
+echo "  Running: ippo_unfair_coin_3agents_711_col"
+echo "  Config: Full paper experiment (1B timesteps)"
+echo "  Environment: Unfair Coin Game"
+echo "  Agents: 3"
+echo "  Coin probabilities: 7:1:1"
+echo "  Reward type: Collective"
+echo "  Seed: 42"
+echo "=============================================="
+echo ""
+
+# Run training with full config, override seed
+python ippo_cnn_coins.py --config-name=ippo_unfair_coin_3agents_711_col SEED=42
+
+echo ""
+echo "Training complete"
+echo "Check wandb project: ippo-unfair-coin-test"
+echo "Models saved to: checkpoints/"
