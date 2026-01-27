@@ -1,22 +1,0 @@
-wandb: Currently logged in as: simonbruno (simonbruno-university-of-amsterdam) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
-wandb: setting up run mi95ssd8
-wandb: Tracking run with wandb version 0.23.1
-wandb: Run data is saved locally in /gpfs/home1/scur0012/simon/fact_fcgrad/wandb/run-20260124_152657-mi95ssd8
-wandb: Run `wandb offline` to turn off syncing.
-wandb: Syncing run ippo_cnn_coins_seed52
-wandb: ⭐️ View project at https://wandb.ai/simonbruno-university-of-amsterdam/ippo-unfair-coin-test
-wandb: 🚀 View run at https://wandb.ai/simonbruno-university-of-amsterdam/ippo-unfair-coin-test/runs/mi95ssd8
-Training:   0%|          | 0/3906.0 [00:00<?, ?update/s]Traceback (most recent call last):
-  File "/gpfs/home1/scur0012/simon/fact_fcgrad/main.py", line 143, in main
-    script_module.single_run(cfg)
-  File "/gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO/ippo_cnn_coins.py", line 1043, in single_run
-    train_fn = jax.jit(make_train(config, pbar=pbar))
-                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/algorithms/IPPO/ippo_cnn_coins.py", line 381, in make_train
-    env = socialjax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
-          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/gpfs/home1/scur0012/simon/fact_fcgrad/external/SocialJax/socialjax/registration.py", line 46, in make
-    env = CoinGame(**env_kwargs)
-          ^^^^^^^^^^^^^^^^^^^^^^
-TypeError: CoinGame.__init__() got an unexpected keyword argument 'green_coin_prob'
-Training:   0%|          | 0/3906.0 [00:00<?, ?update/s]

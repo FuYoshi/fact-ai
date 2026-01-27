@@ -1,19 +1,19 @@
 #!/bin/bash
-#SBATCH --partition=gpu_h100
-#SBATCH --gres=gpu:h100:1
-#SBATCH --job-name=FCGrad_3A
+#SBATCH --partition=gpu_mig
+#SBATCH --gpus=1
+#SBATCH --job-name=FCGrad
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=9
-#SBATCH --time=20:00:00
+#SBATCH --time=10:00:00
 #SBATCH --output=slurm_%x_%j.out
 
 # =============================================================================
-# FCGrad - 3 Agents with 7:1:1 distribution
-# Unfair Coin Game (77.78% agent 0, 11.11% each agents 1 and 2)
+# FCGrad - Fair Conflict-aware Gradient Adjustment
+# Unfair Coin Game (2 agents, 15/16 green, 1/16 red)
 # =============================================================================
 
 echo "=============================================="
-echo "  FCGrad Unfair Coin Game - 3 Agents (7:1:1)"
+echo "  FCGrad Unfair Coin Game"
 echo "=============================================="
 echo "Job ID: $SLURM_JOB_ID"
 echo "Node: $SLURMD_NODENAME"
@@ -40,11 +40,11 @@ python -c "import jax; print(f'JAX {jax.__version__}, Backend: {jax.default_back
 cd $HOME/fact-ai
 
 echo ""
-echo "Running: fcgrad_unfair_coin_3agents_711"
+echo "Running: fcgrad_unfair_coin"
 echo ""
 
 # Run training
-python main.py --config fcgrad_unfair_coin_3agents_711
+python main.py --config fcgrad_unfair_coin
 
 echo ""
 echo "Training complete"

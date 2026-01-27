@@ -39,6 +39,7 @@ env/
 
 # VS Code
 .vscode/
+*.code-workspace
 
 # WandB
 wandb/
@@ -75,6 +76,10 @@ Thumbs.db
 *.swo
 *~
 .cache/
+
+# SLURM output files
+*.out
+*.err
 
 # Environment variables
 .env

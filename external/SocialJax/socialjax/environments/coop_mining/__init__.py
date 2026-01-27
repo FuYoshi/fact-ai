@@ -1,1 +1,0 @@
-from .coop_mining import CoopMining

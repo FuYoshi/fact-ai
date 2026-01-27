@@ -1,40 +1,29 @@
 """
-FCGrad - Main entry point for running IPPO/FCGrad from SocialJax
+FCGrad - Main entry point for running IPPO/FCGrad experiments
 
 FCGrad: Fair Conflict-aware Gradient Adjustment
-Based on Kim & Sycara (CMU) paper
+Reproducibility study of Kim & Sycara (CMU) paper on the Unfair Coin Game.
 """
 import sys
 import os
 import argparse
 
-# Add SocialJax to Python path
-socialjax_path = os.path.join(os.path.dirname(__file__), 'external', 'SocialJax')
-if os.path.exists(socialjax_path):
-    sys.path.insert(0, socialjax_path)
+# Add project root to Python path for socialjax imports
+project_root = os.path.dirname(__file__)
+sys.path.insert(0, project_root)
 
-# Also add IPPO directory for fcgrad_utils import
-ippo_dir = os.path.join(socialjax_path, 'algorithms', 'IPPO')
-if os.path.exists(ippo_dir):
-    sys.path.insert(0, ippo_dir)
+# Add IPPO directory for fcgrad_utils import
+ippo_dir = os.path.join(project_root, 'algorithms', 'IPPO')
+sys.path.insert(0, ippo_dir)
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Run IPPO/FCGrad from SocialJax')
-    parser.add_argument(
-        '--env',
-        type=str,
-        default='coins',
-        choices=['coins', 'cleanup', 'harvest_common', 'coop_mining', 'gift', 
-                 'mushrooms', 'pd_arena', 'territory_open', 'harvest_common_closed',
-                 'harvest_common_partnership'],
-        help='Environment to run (default: coins)'
-    )
+    parser = argparse.ArgumentParser(description='Run IPPO/FCGrad on Unfair Coin Game')
     parser.add_argument(
         '--config',
         type=str,
-        default=None,
-        help='Custom config name (e.g., ippo_unfair_coin, fcgrad_unfair_coin)'
+        default='ippo_unfair_coin_ind',
+        help='Config name (e.g., ippo_unfair_coin_ind, ippo_unfair_coin_col, fcgrad_unfair_coin)'
     )
     parser.add_argument(
         '--total-timesteps',
@@ -58,71 +47,51 @@ def main():
         action='store_true',
         help='Run hyperparameter tuning instead of single run'
     )
-    
+
     args = parser.parse_args()
-    
-    # Map environment name to script name
-    env_to_script = {
-        'coins': 'ippo_cnn_coins',
-        'cleanup': 'ippo_cnn_cleanup',
-        'harvest_common': 'ippo_cnn_harvest_common',
-        'coop_mining': 'ippo_cnn_coop_mining',
-        'gift': 'ippo_cnn_gift',
-        'mushrooms': 'ippo_cnn_mushrooms',
-        'pd_arena': 'ippo_cnn_pd_arena',
-        'territory_open': 'ippo_cnn_territory_open',
-        'harvest_common_closed': 'ippo_cnn_harvest_common_closed',
-        'harvest_common_partnership': 'ippo_cnn_harvest_common_partnership',
-    }
-    
-    script_name = env_to_script[args.env]
+
     # Use custom config if provided, otherwise default
-    if args.config:
-        config_name = args.config
-        # Remove .yaml if user included it
-        if config_name.endswith('.yaml'):
-            config_name = config_name[:-5]
-    else:
-        config_name = script_name
-    
+    config_name = args.config
+    # Remove .yaml if user included it
+    if config_name.endswith('.yaml'):
+        config_name = config_name[:-5]
+
     algo_name = "FCGrad" if args.fcgrad else "IPPO"
-    print(f"Running {algo_name}: {script_name}")
+    print(f"Running {algo_name} on Unfair Coin Game")
     print(f"Config: {config_name}")
     print(f"Working directory: {os.getcwd()}")
     print()
-    
+
     try:
         # Import Hydra and required modules
         from hydra import compose
         from omegaconf import OmegaConf
         import importlib.util
-        
+
         # Load the IPPO script module from file
-        script_path = os.path.join(ippo_dir, f'{script_name}.py')
+        script_path = os.path.join(ippo_dir, 'ippo_cnn_coins.py')
         if not os.path.exists(script_path):
             raise FileNotFoundError(f"Script not found: {script_path}")
-        
-        spec = importlib.util.spec_from_file_location(script_name, script_path)
+
+        spec = importlib.util.spec_from_file_location('ippo_cnn_coins', script_path)
         script_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(script_module)
-        
+
         # Initialize Hydra using initialize_config_dir with absolute path
-        # This is the recommended way when config dir is not relative to CWD
         config_dir = os.path.abspath(os.path.join(ippo_dir, 'config'))
         if not os.path.exists(config_dir):
             raise FileNotFoundError(f"Config directory not found: {config_dir}")
-        
-        # Use initialize_config_dir with absolute path (Hydra 1.1+)
+
         from hydra import initialize_config_dir
         from hydra.core.global_hydra import GlobalHydra
-        
+
         # Clear any existing Hydra instance to avoid conflicts
         GlobalHydra.instance().clear()
-        
+
         with initialize_config_dir(config_dir=config_dir, version_base=None):
-            # Compose the config (use config_name which may be custom)
+            # Compose the config
             cfg = compose(config_name=config_name)
-            
+
             # Override config values from command line
             if args.total_timesteps is not None:
                 cfg['TOTAL_TIMESTEPS'] = args.total_timesteps
@@ -135,20 +104,17 @@ def main():
             # Override WANDB_MODE from environment variable if set
             if 'WANDB_MODE' in os.environ:
                 cfg['WANDB_MODE'] = os.environ['WANDB_MODE']
-            
+
             # Run the training
             if cfg.get('TUNE', False):
                 script_module.tune(cfg)
             else:
                 script_module.single_run(cfg)
-                
+
     except ImportError as e:
         print(f"Error importing required modules: {e}")
-        print("\nMake sure:")
-        print("  1. SocialJax submodule is initialized:")
-        print("     git submodule update --init --recursive")
-        print("  2. Dependencies are installed:")
-        print("     pip install -r external/SocialJax/requirements.txt")
+        print("\nMake sure dependencies are installed:")
+        print("  pip install -r requirements.txt")
         sys.exit(1)
     except Exception as e:
         print(f"Error running IPPO: {e}")
