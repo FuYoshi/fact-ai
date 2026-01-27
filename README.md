@@ -39,11 +39,13 @@ fact-ai/
 git clone <repo-url> fact-ai
 cd fact-ai
 
-# Create virtual environment
+# Option 1: Using uv (recommended)
+uv sync
+uv run python main.py --config ippo_unfair_coin_ind
+
+# Option 2: Using pip
 python -m venv .venv
 source .venv/bin/activate
-
-# Install dependencies
 pip install -r requirements.txt
 
 # Verify JAX GPU support
@@ -54,9 +56,9 @@ python -c "import jax; print(jax.devices())"
 
 | Package | Version |
 |---------|---------|
-| JAX | 0.4.30+ |
-| Flax | 0.8.5+ |
-| Optax | 0.2.2+ |
+| JAX | 0.4.25-0.4.30 |
+| Flax | 0.8.x |
+| Optax | 0.1.7+ |
 | Hydra | 1.3.2+ |
 | WandB | 0.16+ |
 
