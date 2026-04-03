@@ -1,6 +1,6 @@
-from socialjax.environments import CoinGame
+from socialjax.environments import CoinGame, Cleanup
 
-REGISTERED_ENVS = ["coin_game"]
+REGISTERED_ENVS = ["coin_game", "cleanup"]
 
 
 def make(env_id: str, **env_kwargs):
@@ -9,4 +9,6 @@ def make(env_id: str, **env_kwargs):
         raise ValueError(f"{env_id} is not in registered SocialJax environments")
     elif env_id == "coin_game":
         env = CoinGame(**env_kwargs)
+    elif env_id == "cleanup":
+        env = Cleanup(**env_kwargs)
     return env
