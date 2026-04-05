@@ -47,6 +47,18 @@ def main():
         action='store_true',
         help='Run hyperparameter tuning instead of single run'
     )
+    parser.add_argument(
+        '--num-minibatches',
+        type=int,
+        default=None,
+        help='Override NUM_MINIBATCHES (default: from config)'
+    )
+    parser.add_argument(
+        '--num-envs',
+        type=int,
+        default=None,
+        help='Override NUM_ENVS (default: from config)'
+    )
 
     args = parser.parse_args()
 
@@ -101,7 +113,11 @@ def main():
                 cfg['TUNE'] = True
             if args.fcgrad:
                 cfg['FCGRAD'] = True
-            # Override WANDB_MODE from environment variable if set
+            if args.num_minibatches is not None:
+                cfg['NUM_MINIBATCHES'] = args.num_minibatches
+            if args.num_envs is not None:
+                cfg['NUM_ENVS'] = args.num_envs
+            # Override WANDB_MODE from environment variable if set.
             if 'WANDB_MODE' in os.environ:
                 cfg['WANDB_MODE'] = os.environ['WANDB_MODE']
 
