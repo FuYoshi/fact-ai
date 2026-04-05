@@ -447,10 +447,14 @@ def make_train(config: Dict, pbar: Optional[tqdm] = None):
             )
         else:
             # Single TrainState with stacked params (vmap-friendly).
-            train_state = TrainState.create(
+            # Vmap opt init so all state fields (including scalar counts) are stacked.
+            stacked_opt_state = jax.vmap(tx.init)(network_params)
+            train_state = TrainState(
+                step=0,
                 apply_fn=network.apply,
                 params=network_params,
                 tx=tx,
+                opt_state=stacked_opt_state,
             )
 
         # Initialize environment
