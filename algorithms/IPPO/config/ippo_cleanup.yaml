@@ -42,6 +42,27 @@
   "shared_rewards": False     # CRITICAL: Individual rewards only
   "cnn": True
   "jit": True
+  "grid_size": [19, 28]
+  "map_ASCII":
+    - "HFFFHFFHFHFHFHFHFHFHHFHFFFHF"
+    - "HFHFHFFHFHFHFHFHFHFHHFHFFFHF"
+    - "HFFHFFHHFHFHFHFHFHFHHFHFFFHF"
+    - "HFHFHFFHFHFHFHFHFHFHHFHFFFHF"
+    - "HFFFFFFHFHFHFHFHFHFHHFHFFFHF"
+    - "==============+~FHHHHHHf===="
+    - "   P    P      ===+~SSf     "
+    - "     P     P   P  <~Sf  P   "
+    - "             P   P<~S>      "
+    - "   P    P         <~S>   P  "
+    - "               P  <~S>P     "
+    - "     P           P<~S>      "
+    - "           P      <~S> P    "
+    - "  P             P <~S>      "
+    - "^T^T^T^T^T^T^T^T^T;~S,^T^T^T"
+    - "BBBBBBBBBBBBBBBBBBBssBBBBBBB"
+    - "BBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+    - "BBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+    - "BBBBBBBBBBBBBBBBBBBBBBBBBBBB"
 
 # Reward shaping (not used, but keep for compatibility)
 "REW_SHAPING_HORIZON": 2.5e6

@@ -191,6 +191,7 @@ class Cleanup(MultiAgentEnv):
         delayStartOfDirtSpawning=50, # 50
         jit=True,
 
+        grid_size=(19, 28),
         obs_size=11,
         cnn=True,
         map_ASCII = [
@@ -242,8 +243,8 @@ class Cleanup(MultiAgentEnv):
         self._agents = jnp.array(self.agents, dtype=jnp.int16) + len(Items)
 
         self.PLAYER_COLOURS = generate_agent_colors(num_agents)
-        self.GRID_SIZE_ROW = len(map_ASCII)
-        self.GRID_SIZE_COL = len(map_ASCII[0])
+        self.GRID_SIZE_ROW = grid_size[0]
+        self.GRID_SIZE_COL = grid_size[1]
         self.OBS_SIZE = obs_size
         self.PADDING = self.OBS_SIZE - 1
 
