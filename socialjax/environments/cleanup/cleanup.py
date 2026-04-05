@@ -1372,14 +1372,12 @@ class Cleanup(MultiAgentEnv):
             outer_t = state_nxt.outer_t
             reset_inner = inner_t == num_inner_steps
 
-            # if inner episode is done, return start state for next game
-            state_re = _reset_state(key)
-
-            state_re = state_re.replace(outer_t=outer_t + 1)
-            state = jax.tree.map(
-                lambda x, y: jnp.where(reset_inner, x, y),
-                state_re,
-                state_nxt,
+            # If inner episode is done, return start state for next game.
+            # Use jax.lax.cond to avoid computing the full reset on every step.
+            state = jax.lax.cond(
+                reset_inner,
+                lambda: _reset_state(key).replace(outer_t=outer_t + 1),
+                lambda: state_nxt,
             )
             outer_t = state.outer_t
             reset_outer = outer_t == num_outer_steps
