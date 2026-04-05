@@ -79,7 +79,9 @@ class LogWrapper(JaxMARLWrapper):
         state: LogEnvState,
         action: Union[int, float],
     ) -> Tuple[chex.Array, LogEnvState, float, bool, dict]:
-        obs, env_state, reward, done, info = self._env.step(
+        # Call step_env directly to skip the unconditional reset in the base
+        # class step(). The environments handle inner resets internally.
+        obs, env_state, reward, done, info = self._env.step_env(
             key, state.env_state, action
         )
         ep_done = done["__all__"]
