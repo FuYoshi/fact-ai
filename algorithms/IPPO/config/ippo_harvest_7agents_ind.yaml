@@ -1,0 +1,52 @@
+# =============================================================================
+# IPPO Individual Reward on Harvest - 7 Agents
+# =============================================================================
+
+"SAVE_PARAMS_AS": "harvest_7agents_ippo_ind"
+
+"LR": 0.0005
+"ANNEAL_LR": True
+
+"NUM_ENVS": 256
+"NUM_STEPS": 1000
+"TOTAL_TIMESTEPS": 3e8
+"UPDATE_EPOCHS": 2
+"NUM_MINIBATCHES": 500
+"GAMMA": 0.99
+"GAE_LAMBDA": 0.95
+"CLIP_EPS": 0.2
+"ENT_COEF": 0.01
+"VF_COEF": 0.5
+"MAX_GRAD_NORM": 0.5
+"ACTIVATION": "relu"
+
+"ENV_NAME": "harvest"
+"ENV_KWARGS":
+  "num_agents": 7
+  "num_inner_steps": 1000
+  "cnn": True
+  "jit": True
+  "shared_rewards": False
+
+"REW_SHAPING_HORIZON": 2.5e6
+"SHAPING_BEGIN": 1e6
+
+"SEED": 44
+"NUM_SEEDS": 1
+"REWARD": "individual"
+"GIF_NUM_FRAMES": 250
+"PARAMETER_SHARING": True
+"TUNE": False
+
+"FCGRAD": False
+"USE_DUAL_HEAD": False
+"FCGRAD_BETA": 0.5
+
+"ENTITY": ""
+"PROJECT": "harvest-scaling"
+"WANDB_MODE": "online"
+"WANDB_TAGS":
+  - IPPO
+  - HARVEST
+  - 7_AGENTS
+  - INDIVIDUAL_REWARD

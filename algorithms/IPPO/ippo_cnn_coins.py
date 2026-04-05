@@ -939,8 +939,10 @@ def load_params(load_path: Path, parameter_sharing: bool = True):
         return [jax.tree_util.tree_map(lambda x: jnp.array(x), p) for p in params]
 
 
-def evaluate(params, env, config: Dict, save_dir: str = "evaluation/coins"):
+def evaluate(params, env, config: Dict, save_dir: str = None):
     """Run evaluation and create GIF."""
+    if save_dir is None:
+        save_dir = f"evaluation/{config['ENV_NAME']}"
     rng = jax.random.PRNGKey(0)
     rng, reset_rng = jax.random.split(rng)
 
@@ -1023,27 +1025,19 @@ def single_run(config):
     """Run a single training experiment."""
     config = OmegaConf.to_container(config)
 
-    # Build descriptive run name
+    # Build descriptive run name.
     method = "fcgrad" if config.get("FCGRAD", False) else "ippo"
     num_agents = config["ENV_KWARGS"].get("num_agents", 2)
     reward_type = "col" if config["ENV_KWARGS"].get("shared_rewards", False) else "ind"
     seed = config["SEED"]
-    
-    # Check if it's the 3-agent 7:1:1 setup
-    coin_probs = config["ENV_KWARGS"].get("coin_probs", None)
-    if coin_probs and len(coin_probs) == 3 and abs(coin_probs[0] - 0.7778) < 0.01:
-        agent_suffix = "_3agents_711"
-    elif num_agents == 3:
-        agent_suffix = "_3agents"
-    else:
-        agent_suffix = ""
-    
-    run_name = f'{method}{agent_suffix}_{reward_type}_seed{seed}'
+    env_name = config["ENV_NAME"]
+
+    run_name = f'{env_name}_{method}_{num_agents}agents_{reward_type}_seed{seed}'
 
     wandb.init(
         entity=config["ENTITY"],
         project=config["PROJECT"],
-        tags=["IPPO", "FF"],
+        tags=config.get("WANDB_TAGS", ["IPPO"]),
         config=config,
         mode=config["WANDB_MODE"],
         name=run_name
