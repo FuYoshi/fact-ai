@@ -31,7 +31,7 @@ def beta_weighting(g_ind: PyTree, g_col: PyTree, beta: float = 0.5) -> PyTree:
         (PyTree): beta weighted components.
     """
     assert 0 <= beta <= 1, "beta must be in [0, 1]"
-    return jax.tree_map(lambda gi, gc: (1 - beta) * gi + beta * gc, g_ind, g_col)
+    return jax.tree.map(lambda gi, gc: (1 - beta) * gi + beta * gc, g_ind, g_col)
 
 
 def pytree_dot(g_ind: PyTree, g_col: PyTree) -> jnp.ndarray:
@@ -268,7 +268,7 @@ def compute_fcgrad(
     l_critic_col, g_critic_col = grad_fn(params, traj, tgt_col, clip_eps, network, False)
 
     # Combine the gradients. Update embedder using the sum of other gradients.
-    grads = jax.tree_map(lambda a, b, c: a + b + c, g_actor, g_critic_ind, g_critic_col)
+    grads = jax.tree.map(lambda a, b, c: a + b + c, g_actor, g_critic_ind, g_critic_col)
     loss_info = {
         "loss_actor_individual": l_actor_ind,
         "loss_actor_collective": l_actor_col,

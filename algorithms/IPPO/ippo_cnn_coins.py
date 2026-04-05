@@ -840,10 +840,10 @@ def make_train(config: Dict, pbar: Optional[tqdm] = None):
             fairness = compute_fairness_metrics(rollout_returns)
 
             # Average other metrics
-            metric = jax.tree_map(lambda x: x.mean(), traj_batch.info)
+            metric = jax.tree.map(lambda x: x.mean(), traj_batch.info)
 
             # Aggregate over loss info for loss metrics.
-            loss_metrics = jax.tree_map(lambda x: x.mean(), loss_info)
+            loss_metrics = jax.tree.map(lambda x: x.mean(), loss_info)
 
             # Add fairness metrics and loss metrics.
             metric.update(loss_metrics)
@@ -865,7 +865,7 @@ def make_train(config: Dict, pbar: Optional[tqdm] = None):
                         return float(x.item()) if x.ndim == 0 else float(x.mean())
                     return x
 
-                metric_converted = jax.tree_map(to_native, metric)
+                metric_converted = jax.tree.map(to_native, metric)
                 wandb.log(metric_converted)
 
                 if pbar is not None:
@@ -1057,7 +1057,7 @@ def single_run(config):
     pbar.close()
 
     # Save and evaluate
-    train_state = jax.tree_map(lambda x: x[0], out["runner_state"][0])
+    train_state = jax.tree.map(lambda x: x[0], out["runner_state"][0])
     save_path = f"./checkpoints/{config['ENV_NAME']}_seed{config['SEED']}.pkl"
     save_params(train_state, save_path, parameter_sharing=config["PARAMETER_SHARING"])
 
