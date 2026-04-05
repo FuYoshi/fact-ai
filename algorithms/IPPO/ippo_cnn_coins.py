@@ -750,7 +750,7 @@ def make_train(config: Dict, pbar: Optional[tqdm] = None):
 
                         batch = (traj_i, adv_ind_i, adv_col_i, tgt_ind_i, tgt_col_i)
                         batch = jax.tree_util.tree_map(
-                            lambda x: x.reshape((batch_size,) + x.shape[1:]) if x.ndim > 1 else x.reshape(batch_size), batch
+                            lambda x: x.reshape((batch_size,) + x.shape[2:]) if x.ndim > 2 else x.reshape(batch_size), batch
                         )
                         shuffled_batch = jax.tree_util.tree_map(
                             lambda x: jnp.take(x, permutation, axis=0), batch
