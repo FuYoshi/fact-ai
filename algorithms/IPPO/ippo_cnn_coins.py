@@ -414,20 +414,17 @@ def make_train(config: Dict, pbar: Optional[tqdm] = None):
             init_x = jnp.zeros((1, *env.observation_space()[0].shape))
             network_params = network.init(init_rng, init_x)
         else:
-            # Separate network per agent (FCGrad paper setup)
-            network = [
-                ActorCritic(
-                    action_dim=env.action_space().n,
-                    activation=config["ACTIVATION"],
-                    use_dual_critic=config.get("USE_DUAL_HEAD", False)
-                )
-                for _ in range(num_agents)
-            ]
+            # Separate network per agent (FCGrad paper setup).
+            # Single network instance, stacked params for vmap.
+            network = ActorCritic(
+                action_dim=env.action_space().n,
+                activation=config["ACTIVATION"],
+                use_dual_critic=config.get("USE_DUAL_HEAD", False)
+            )
             init_x = jnp.zeros((1, *env.observation_space()[0].shape))
-            network_params = []
-            for i in range(num_agents):
-                rng, init_rng = jax.random.split(rng)
-                network_params.append(network[i].init(init_rng, init_x))
+            init_rngs = jax.random.split(rng, num_agents + 1)
+            rng = init_rngs[0]
+            network_params = jax.vmap(network.init, in_axes=(0, None))(init_rngs[1:], init_x)
 
         # Optimizer
         if config["ANNEAL_LR"]:
@@ -449,15 +446,16 @@ def make_train(config: Dict, pbar: Optional[tqdm] = None):
                 tx=tx,
             )
         else:
-            # Separate TrainState per agent
-            train_state = [
-                TrainState.create(
-                    apply_fn=network[i].apply,
-                    params=network_params[i],
-                    tx=tx,
-                )
-                for i in range(num_agents)
-            ]
+            # Single TrainState with stacked params (vmap-friendly).
+            # Vmap opt init so all state fields (including scalar counts) are stacked.
+            stacked_opt_state = jax.vmap(tx.init)(network_params)
+            train_state = TrainState(
+                step=0,
+                apply_fn=network.apply,
+                params=network_params,
+                tx=tx,
+                opt_state=stacked_opt_state,
+            )
 
         # Initialize environment
         rng, reset_rng = jax.random.split(rng)
@@ -489,30 +487,23 @@ def make_train(config: Dict, pbar: Optional[tqdm] = None):
                     action = pi.sample(seed=action_rng)
                     log_prob = pi.log_prob(action)
                 else:
-                    # Separate networks: process each agent separately
-                    actions = []
-                    log_probs = []
-                    values_ind = []
-                    values_col = []
+                    # Separate networks: vmap over agents.
                     action_rngs = jax.random.split(action_rng, num_agents)
 
-                    for i in range(num_agents):
-                        # Get agent i's observations: (num_envs, ...)
-                        obs_i = obs_transposed[i]
-                        pi_i, val_ind_i, val_col_i = network[i].apply(train_state[i].params, obs_i)
-                        action_i = pi_i.sample(seed=action_rngs[i])
+                    def _forward_agent(params_i, obs_i, rng_i):
+                        pi_i, val_ind_i, val_col_i = network.apply(params_i, obs_i)
+                        action_i = pi_i.sample(seed=rng_i)
                         log_prob_i = pi_i.log_prob(action_i)
+                        return action_i, log_prob_i, val_ind_i, val_col_i
 
-                        actions.append(action_i)
-                        log_probs.append(log_prob_i)
-                        values_ind.append(val_ind_i)
-                        values_col.append(val_col_i)
-
-                    # Stack into agent-major order: (num_agents, num_envs) -> (num_actors,)
-                    action = jnp.stack(actions).reshape(-1)
-                    log_prob = jnp.stack(log_probs).reshape(-1)
-                    value_ind = jnp.stack(values_ind).reshape(-1)
-                    value_col = jnp.stack(values_col).reshape(-1)
+                    action, log_prob, value_ind, value_col = jax.vmap(_forward_agent)(
+                        train_state.params, obs_transposed, action_rngs
+                    )
+                    # Reshape from (num_agents, num_envs) to (num_actors,).
+                    action = action.reshape(-1)
+                    log_prob = log_prob.reshape(-1)
+                    value_ind = value_ind.reshape(-1)
+                    value_col = value_col.reshape(-1)
 
                 # For shared params, obs_batch is already set; for separate, create it now
                 if not config["PARAMETER_SHARING"]:
@@ -598,18 +589,17 @@ def make_train(config: Dict, pbar: Optional[tqdm] = None):
                     gamma=config["GAMMA"],
                 )
             else:
-                # Per-agent computation for separate networks
-                last_vals_ind = []
-                last_vals_col = []
-                for i in range(num_agents):
-                    obs_i = last_obs_transposed[i]
-                    _, val_ind_i, val_col_i = network[i].apply(train_state[i].params, obs_i)
-                    last_vals_ind.append(val_ind_i)
-                    last_vals_col.append(val_col_i)
+                # Per-agent computation: vmap over agents.
+                def _get_values(params_i, obs_i):
+                    _, val_ind_i, val_col_i = network.apply(params_i, obs_i)
+                    return val_ind_i, val_col_i
 
-                # Stack: (num_agents, num_envs) -> (num_actors,) in agent-major order
-                last_val_ind = jnp.stack(last_vals_ind).reshape(-1)
-                last_val_col = jnp.stack(last_vals_col).reshape(-1)
+                last_vals_ind, last_vals_col = jax.vmap(_get_values)(
+                    train_state.params, last_obs_transposed
+                )
+                # Reshape: (num_agents, num_envs) -> (num_actors,).
+                last_val_ind = last_vals_ind.reshape(-1)
+                last_val_col = last_vals_col.reshape(-1)
 
                 advantages_ind, targets_ind = compute_gae(
                     traj_batch, last_val_ind, config["GAMMA"], config["GAE_LAMBDA"]
@@ -714,47 +704,47 @@ def make_train(config: Dict, pbar: Optional[tqdm] = None):
                 rng = update_state[-1]
 
             else:
-                # Separate networks: per-agent FCGrad comparison (as in paper)
-                # Each agent compares its own V_ind vs V_col
+                # Separate networks: vmapped per-agent updates.
+                # Each agent compares its own V_ind vs V_col.
 
-                def _update_agent(agent_idx, train_state_i, traj_i, adv_ind_i, adv_col_i,
-                                  tgt_ind_i, tgt_col_i, ret_ind_i, ret_col_i, rng):
-                    """Update a single agent's network."""
+                def _update_one_agent(params_i, opt_state_i, traj_i, adv_ind_i, adv_col_i,
+                                      tgt_ind_i, tgt_col_i, ret_ind_i, ret_col_i, rng_i):
+                    """Update a single agent's network (vmap-compatible)."""
 
-                    def _update_minibatch_agent(train_state_i, batch_info):
+                    def _update_minibatch(carry, batch_info):
+                        params, opt_state = carry
                         traj_batch, adv_ind, adv_col, tgt_ind, tgt_col = batch_info
 
                         if config.get("FCGRAD", False):
-                            # Per-agent FCGrad: use THIS agent's returns for comparison
                             grads, loss_info = compute_fcgrad(
-                                train_state_i.params,
-                                traj_batch,
-                                ret_ind_i, ret_col_i,  # Per-agent returns!
+                                params, traj_batch,
+                                ret_ind_i, ret_col_i,
                                 adv_ind, adv_col,
                                 tgt_ind, tgt_col,
                                 config["CLIP_EPS"],
                                 config["FCGRAD_BETA"],
-                                network[agent_idx]
+                                network
                             )
                         else:
                             grad_fn = jax.value_and_grad(ppo_loss, has_aux=True)
                             (loss_ppo, aux), grads = grad_fn(
-                                train_state_i.params,
-                                traj_batch,
+                                params, traj_batch,
                                 adv_ind, tgt_ind,
                                 config["CLIP_EPS"],
                                 config["VF_COEF"],
                                 config["ENT_COEF"],
-                                network[agent_idx]
+                                network
                             )
                             loss_info = {"loss_ppo": loss_ppo}
 
-                        train_state_i = train_state_i.apply_gradients(grads=grads)
-                        return train_state_i, loss_info
+                        updates, new_opt_state = tx.update(grads, opt_state, params)
+                        new_params = optax.apply_updates(params, updates)
+                        return (new_params, new_opt_state), loss_info
 
-                    for _ in range(config["UPDATE_EPOCHS"]):
+                    def _update_epoch(carry, unused):
+                        params, opt_state, rng = carry
                         rng, perm_rng = jax.random.split(rng)
-                        batch_size = config["NUM_STEPS"] * num_envs  # Per-agent batch
+                        batch_size = config["NUM_STEPS"] * num_envs
 
                         permutation = jax.random.permutation(perm_rng, batch_size)
 
@@ -770,55 +760,55 @@ def make_train(config: Dict, pbar: Optional[tqdm] = None):
                             shuffled_batch,
                         )
 
-                        train_state_i, loss_info = jax.lax.scan(
-                            _update_minibatch_agent, train_state_i, minibatches
+                        (params, opt_state), loss_info = jax.lax.scan(
+                            _update_minibatch, (params, opt_state), minibatches
                         )
 
-                    return train_state_i, loss_info, rng
+                        return (params, opt_state, rng), loss_info
 
-                # Split trajectory data per agent
-                # traj_batch has shape (num_steps, num_actors, ...) in agent-major order
-                # Reshape to (num_steps, num_agents, num_envs, ...)
-                def split_per_agent(x):
+                    (new_params, new_opt_state, _), loss_info = jax.lax.scan(
+                        _update_epoch, (params_i, opt_state_i, rng_i), None, config["UPDATE_EPOCHS"]
+                    )
+
+                    return new_params, new_opt_state, loss_info
+
+                # Split trajectory data per agent.
+                # traj_batch shape: (num_steps, num_actors, ...) in agent-major order.
+                # Reshape to (num_agents, num_steps, num_envs, ...) for vmap.
+                def split_and_transpose(x):
                     if x.ndim == 2:  # (num_steps, num_actors)
-                        return x.reshape(config["NUM_STEPS"], num_agents, num_envs)
+                        return x.reshape(config["NUM_STEPS"], num_agents, num_envs).transpose(1, 0, 2)
                     elif x.ndim > 2:  # (num_steps, num_actors, ...)
-                        return x.reshape(config["NUM_STEPS"], num_agents, num_envs, *x.shape[2:])
+                        reshaped = x.reshape(config["NUM_STEPS"], num_agents, num_envs, *x.shape[2:])
+                        return jnp.moveaxis(reshaped, 1, 0)
                     return x
 
-                traj_per_agent = jax.tree_util.tree_map(split_per_agent, traj_batch)
-                adv_ind_per_agent = advantages_ind.reshape(config["NUM_STEPS"], num_agents, num_envs)
-                adv_col_per_agent = advantages_col.reshape(config["NUM_STEPS"], num_agents, num_envs)
-                tgt_ind_per_agent = targets_ind.reshape(config["NUM_STEPS"], num_agents, num_envs)
-                tgt_col_per_agent = targets_col.reshape(config["NUM_STEPS"], num_agents, num_envs)
+                traj_vmapped = jax.tree_util.tree_map(split_and_transpose, traj_batch)
+                adv_ind_vmapped = advantages_ind.reshape(config["NUM_STEPS"], num_agents, num_envs).transpose(1, 0, 2)
+                adv_col_vmapped = advantages_col.reshape(config["NUM_STEPS"], num_agents, num_envs).transpose(1, 0, 2)
+                tgt_ind_vmapped = targets_ind.reshape(config["NUM_STEPS"], num_agents, num_envs).transpose(1, 0, 2)
+                tgt_col_vmapped = targets_col.reshape(config["NUM_STEPS"], num_agents, num_envs).transpose(1, 0, 2)
 
-                # Update each agent - create new list to avoid mutation issues with JAX
-                new_train_states = []
-                loss_info_list = []
-                for i in range(num_agents):
-                    # Extract agent i's data
-                    traj_i = jax.tree_util.tree_map(lambda x, idx=i: x[:, idx] if x.ndim >= 2 else x, traj_per_agent)
-                    adv_ind_i = adv_ind_per_agent[:, i]
-                    adv_col_i = adv_col_per_agent[:, i]
-                    tgt_ind_i = tgt_ind_per_agent[:, i]
-                    tgt_col_i = tgt_col_per_agent[:, i]
+                agent_rngs = jax.random.split(rng, num_agents)
 
-                    new_ts_i, loss_info_i, rng = _update_agent(
-                        i, train_state[i], traj_i, adv_ind_i, adv_col_i,
-                        tgt_ind_i, tgt_col_i,
-                        dis_returns_ind_per_agent[i], dis_returns_col_per_agent[i],
-                        rng
-                    )
-                    new_train_states.append(new_ts_i)
-                    loss_info_list.append(loss_info_i)
+                new_params, new_opt_state, loss_info = jax.vmap(_update_one_agent)(
+                    train_state.params, train_state.opt_state,
+                    traj_vmapped, adv_ind_vmapped, adv_col_vmapped,
+                    tgt_ind_vmapped, tgt_col_vmapped,
+                    dis_returns_ind_per_agent, dis_returns_col_per_agent,
+                    agent_rngs
+                )
 
-                # Replace train_state with the new list
-                train_state = new_train_states
+                train_state = train_state.replace(
+                    step=train_state.step + 1,
+                    params=new_params,
+                    opt_state=new_opt_state,
+                )
 
-                # Aggregate loss info across agents
+                # Aggregate loss info: mean over agents (axis 0).
                 loss_info = jax.tree_util.tree_map(
-                    lambda *xs: jnp.stack(xs).mean(axis=0),
-                    *loss_info_list
+                    lambda x: x.mean(axis=0),
+                    loss_info
                 )
 
             # -----------------------------------------------------------------
@@ -840,10 +830,10 @@ def make_train(config: Dict, pbar: Optional[tqdm] = None):
             fairness = compute_fairness_metrics(rollout_returns)
 
             # Average other metrics
-            metric = jax.tree_map(lambda x: x.mean(), traj_batch.info)
+            metric = jax.tree.map(lambda x: x.mean(), traj_batch.info)
 
             # Aggregate over loss info for loss metrics.
-            loss_metrics = jax.tree_map(lambda x: x.mean(), loss_info)
+            loss_metrics = jax.tree.map(lambda x: x.mean(), loss_info)
 
             # Add fairness metrics and loss metrics.
             metric.update(loss_metrics)
@@ -865,7 +855,7 @@ def make_train(config: Dict, pbar: Optional[tqdm] = None):
                         return float(x.item()) if x.ndim == 0 else float(x.mean())
                     return x
 
-                metric_converted = jax.tree_map(to_native, metric)
+                metric_converted = jax.tree.map(to_native, metric)
                 wandb.log(metric_converted)
 
                 if pbar is not None:
@@ -917,11 +907,8 @@ def save_params(train_state, save_path: Path, parameter_sharing: bool = True):
     save_path.parent.mkdir(parents=True, exist_ok=True)  # ensures folder exists
 
     # os.makedirs(os.path.dirname(save_path), exist_ok=True)
-    if parameter_sharing:
-        params = jax.tree_util.tree_map(lambda x: np.array(x), train_state.params)
-    else:
-        # List of TrainStates - save list of params
-        params = [jax.tree_util.tree_map(lambda x: np.array(x), ts.params) for ts in train_state]
+    # Both cases: train_state.params is a pytree (stacked for separate networks).
+    params = jax.tree_util.tree_map(lambda x: np.array(x), train_state.params)
     with open(save_path, 'wb') as f:
         pickle.dump(params, f)
 
@@ -932,35 +919,23 @@ def load_params(load_path: Path, parameter_sharing: bool = True):
     with open(load_path, 'rb') as f:
         params = pickle.load(f)
 
-    if parameter_sharing:
-        return jax.tree_util.tree_map(lambda x: jnp.array(x), params)
-    else:
-        # List of params
-        return [jax.tree_util.tree_map(lambda x: jnp.array(x), p) for p in params]
+    return jax.tree_util.tree_map(lambda x: jnp.array(x), params)
 
 
-def evaluate(params, env, config: Dict, save_dir: str = "evaluation/coins"):
+def evaluate(params, env, config: Dict, save_dir: str = None):
     """Run evaluation and create GIF."""
+    if save_dir is None:
+        save_dir = f"evaluation/{config['ENV_NAME']}"
     rng = jax.random.PRNGKey(0)
     rng, reset_rng = jax.random.split(rng)
 
     obs, state = env.reset(reset_rng)
 
-    if config["PARAMETER_SHARING"]:
-        network = ActorCritic(
-            action_dim=env.action_space().n,
-            activation=config["ACTIVATION"],
-            use_dual_critic=config.get("USE_DUAL_HEAD", False)
-        )
-    else:
-        network = [
-            ActorCritic(
-                action_dim=env.action_space().n,
-                activation=config["ACTIVATION"],
-                use_dual_critic=config.get("USE_DUAL_HEAD", False)
-            )
-            for _ in range(env.num_agents)
-        ]
+    network = ActorCritic(
+        action_dim=env.action_space().n,
+        activation=config["ACTIVATION"],
+        use_dual_critic=config.get("USE_DUAL_HEAD", False)
+    )
 
     pics = [env.render(state)]
 
@@ -974,12 +949,13 @@ def evaluate(params, env, config: Dict, save_dir: str = "evaluation/coins"):
             pi, _, _ = network.apply(params, obs_batch)
             actions = pi.sample(seed=action_rng)
         else:
-            # Separate networks: process each agent
+            # Separate networks: index stacked params per agent.
             action_rngs = jax.random.split(action_rng, env.num_agents)
             actions_list = []
             for i, agent in enumerate(env.agents):
-                obs_i = obs[agent][None, ...]  # Add batch dim
-                pi_i, _, _ = network[i].apply(params[i], obs_i)
+                obs_i = obs[agent][None, ...]  # Add batch dim.
+                params_i = jax.tree_util.tree_map(lambda x: x[i], params)
+                pi_i, _, _ = network.apply(params_i, obs_i)
                 action_i = pi_i.sample(seed=action_rngs[i])
                 actions_list.append(action_i.squeeze())
             actions = jnp.stack(actions_list)
@@ -1023,27 +999,19 @@ def single_run(config):
     """Run a single training experiment."""
     config = OmegaConf.to_container(config)
 
-    # Build descriptive run name
+    # Build descriptive run name.
     method = "fcgrad" if config.get("FCGRAD", False) else "ippo"
     num_agents = config["ENV_KWARGS"].get("num_agents", 2)
     reward_type = "col" if config["ENV_KWARGS"].get("shared_rewards", False) else "ind"
     seed = config["SEED"]
-    
-    # Check if it's the 3-agent 7:1:1 setup
-    coin_probs = config["ENV_KWARGS"].get("coin_probs", None)
-    if coin_probs and len(coin_probs) == 3 and abs(coin_probs[0] - 0.7778) < 0.01:
-        agent_suffix = "_3agents_711"
-    elif num_agents == 3:
-        agent_suffix = "_3agents"
-    else:
-        agent_suffix = ""
-    
-    run_name = f'{method}{agent_suffix}_{reward_type}_seed{seed}'
+    env_name = config["ENV_NAME"]
+
+    run_name = f'{env_name}_{method}_{num_agents}agents_{reward_type}_seed{seed}'
 
     wandb.init(
         entity=config["ENTITY"],
         project=config["PROJECT"],
-        tags=["IPPO", "FF"],
+        tags=config.get("WANDB_TAGS", ["IPPO"]),
         config=config,
         mode=config["WANDB_MODE"],
         name=run_name
@@ -1063,7 +1031,7 @@ def single_run(config):
     pbar.close()
 
     # Save and evaluate
-    train_state = jax.tree_map(lambda x: x[0], out["runner_state"][0])
+    train_state = jax.tree.map(lambda x: x[0], out["runner_state"][0])
     save_path = f"./checkpoints/{config['ENV_NAME']}_seed{config['SEED']}.pkl"
     save_params(train_state, save_path, parameter_sharing=config["PARAMETER_SHARING"])
 

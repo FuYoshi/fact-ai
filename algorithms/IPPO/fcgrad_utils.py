@@ -15,7 +15,6 @@ from typing import Any
 
 import jax
 import jax.numpy as jnp
-from jax import flatten_util
 
 PyTree = Any
 
@@ -31,7 +30,7 @@ def beta_weighting(g_ind: PyTree, g_col: PyTree, beta: float = 0.5) -> PyTree:
         (PyTree): beta weighted components.
     """
     assert 0 <= beta <= 1, "beta must be in [0, 1]"
-    return jax.tree_map(lambda gi, gc: (1 - beta) * gi + beta * gc, g_ind, g_col)
+    return jax.tree.map(lambda gi, gc: (1 - beta) * gi + beta * gc, g_ind, g_col)
 
 
 def pytree_dot(g_ind: PyTree, g_col: PyTree) -> jnp.ndarray:
@@ -44,9 +43,14 @@ def pytree_dot(g_ind: PyTree, g_col: PyTree) -> jnp.ndarray:
     Returns:
         (jnp.ndarray): dot product (jax represents it as 0D array).
     """
-    g_ind_vec, _ = flatten_util.ravel_pytree(g_ind)
-    g_col_vec, _ = flatten_util.ravel_pytree(g_col)
-    return jnp.dot(g_ind_vec, g_col_vec)
+    leaves = jax.tree.leaves(jax.tree.map(lambda a, b: jnp.sum(a * b), g_ind, g_col))
+    return jnp.sum(jnp.array(leaves))
+
+
+def pytree_norm_sq(g: PyTree) -> jnp.ndarray:
+    """Compute the squared L2 norm of a pytree."""
+    leaves = jax.tree.leaves(jax.tree.map(lambda x: jnp.sum(x * x), g))
+    return jnp.sum(jnp.array(leaves))
 
 
 def pytree_project(g_ind: PyTree, g_col: PyTree, eps: float = 1e-8) -> PyTree:
@@ -60,17 +64,10 @@ def pytree_project(g_ind: PyTree, g_col: PyTree, eps: float = 1e-8) -> PyTree:
     Returns:
         (PyTree): g_ind projected onto g_col.
     """
-    # Flatten PyTrees to vectors
-    g_ind_vec, unravel_fn = flatten_util.ravel_pytree(g_ind)
-    g_col_vec, _ = flatten_util.ravel_pytree(g_col)
-
-    dot = jnp.dot(g_ind_vec, g_col_vec)
-
-    projection = g_ind_vec - (dot / (jnp.dot(g_col_vec, g_col_vec) + eps)) * g_col_vec
-
-    # Convert back to PyTree
-    g_ind_proj = unravel_fn(projection)
-    return g_ind_proj
+    dot = pytree_dot(g_ind, g_col)
+    norm_sq = pytree_norm_sq(g_col)
+    coeff = dot / (norm_sq + eps)
+    return jax.tree.map(lambda gi, gc: gi - coeff * gc, g_ind, g_col)
 
 
 def grads_align(dot: jnp.ndarray) -> jnp.ndarray:
@@ -268,7 +265,7 @@ def compute_fcgrad(
     l_critic_col, g_critic_col = grad_fn(params, traj, tgt_col, clip_eps, network, False)
 
     # Combine the gradients. Update embedder using the sum of other gradients.
-    grads = jax.tree_map(lambda a, b, c: a + b + c, g_actor, g_critic_ind, g_critic_col)
+    grads = jax.tree.map(lambda a, b, c: a + b + c, g_actor, g_critic_ind, g_critic_col)
     loss_info = {
         "loss_actor_individual": l_actor_ind,
         "loss_actor_collective": l_actor_col,

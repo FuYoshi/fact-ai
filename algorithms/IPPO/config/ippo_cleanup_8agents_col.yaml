@@ -1,0 +1,73 @@
+# =============================================================================
+# IPPO Collective on Cleanup - 8 Agents
+# =============================================================================
+
+"SAVE_PARAMS_AS": "cleanup_8agents_ippo_col"
+
+"LR": 0.0005
+"ANNEAL_LR": True
+
+"NUM_ENVS": 64
+"NUM_STEPS": 1000
+"TOTAL_TIMESTEPS": 8e8
+"UPDATE_EPOCHS": 2
+"NUM_MINIBATCHES": 500
+"GAMMA": 0.99
+"GAE_LAMBDA": 0.95
+"CLIP_EPS": 0.2
+"ENT_COEF": 0.01
+"VF_COEF": 0.5
+"MAX_GRAD_NORM": 0.5
+"ACTIVATION": "relu"
+
+"ENV_NAME": "cleanup"
+"ENV_KWARGS":
+  "num_agents": 8
+  "num_inner_steps": 1000
+  "shared_rewards": True
+  "cnn": True
+  "jit": True
+  "grid_size": [19, 28]
+  "map_ASCII":
+    - "HFFFHFFHFHFHFHFHFHFHHFHFFFHF"
+    - "HFHFHFFHFHFHFHFHFHFHHFHFFFHF"
+    - "HFFHFFHHFHFHFHFHFHFHHFHFFFHF"
+    - "HFHFHFFHFHFHFHFHFHFHHFHFFFHF"
+    - "HFFFFFFHFHFHFHFHFHFHHFHFFFHF"
+    - "==============+~FHHHHHHf===="
+    - "   P    P      ===+~SSf     "
+    - "     P     P   P  <~Sf  P   "
+    - "             P   P<~S>      "
+    - "   P    P         <~S>   P  "
+    - "               P  <~S>P     "
+    - "     P           P<~S>      "
+    - "           P      <~S> P    "
+    - "  P             P <~S>      "
+    - "^T^T^T^T^T^T^T^T^T;~S,^T^T^T"
+    - "BBBBBBBBBBBBBBBBBBBssBBBBBBB"
+    - "BBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+    - "BBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+    - "BBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+
+"REW_SHAPING_HORIZON": 2.5e6
+"SHAPING_BEGIN": 1e6
+
+"SEED": 42
+"NUM_SEEDS": 1
+"REWARD": "common"
+"GIF_NUM_FRAMES": 250
+"PARAMETER_SHARING": True
+"TUNE": False
+
+"FCGRAD": False
+"USE_DUAL_HEAD": False
+"FCGRAD_BETA": 0.7
+
+"ENTITY": ""
+"PROJECT": "harvest-scaling"
+"WANDB_MODE": "online"
+"WANDB_TAGS":
+  - IPPO
+  - CLEANUP
+  - 8_AGENTS
+  - COMMON_REWARD
