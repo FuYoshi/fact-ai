@@ -4,9 +4,9 @@ FCGrad - Main entry point for running IPPO/FCGrad experiments
 FCGrad: Fair Conflict-aware Gradient Adjustment
 Reproducibility study of Kim & Sycara (CMU) paper on the Unfair Coin Game.
 """
-import sys
-import os
 import argparse
+import os
+import sys
 
 # Add project root to Python path for socialjax imports
 project_root = os.path.dirname(__file__)
@@ -19,6 +19,12 @@ sys.path.insert(0, ippo_dir)
 
 def main():
     parser = argparse.ArgumentParser(description='Run IPPO/FCGrad on Unfair Coin Game')
+    parser.add_argument(
+        '--algorithm',
+        type=str,
+        default='ippo_cnn_coins',
+        help='Environment algorithm filename (e.g., ippo_cnn_coins)'
+    )
     parser.add_argument(
         '--config',
         type=str,
@@ -57,23 +63,24 @@ def main():
         config_name = config_name[:-5]
 
     algo_name = "FCGrad" if args.fcgrad else "IPPO"
-    print(f"Running {algo_name} on Unfair Coin Game")
+    print(f"Running {algo_name} on {args.algorithm}")
     print(f"Config: {config_name}")
     print(f"Working directory: {os.getcwd()}")
     print()
 
     try:
         # Import Hydra and required modules
-        from hydra import compose
-        from omegaconf import OmegaConf
         import importlib.util
 
+        from hydra import compose
+        from omegaconf import OmegaConf
+
         # Load the IPPO script module from file
-        script_path = os.path.join(ippo_dir, 'ippo_cnn_coins.py')
+        script_path = os.path.join(ippo_dir, f'{args.algorithm}.py')
         if not os.path.exists(script_path):
             raise FileNotFoundError(f"Script not found: {script_path}")
 
-        spec = importlib.util.spec_from_file_location('ippo_cnn_coins', script_path)
+        spec = importlib.util.spec_from_file_location(f'{args.algorithm}', script_path)
         script_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(script_module)
 
