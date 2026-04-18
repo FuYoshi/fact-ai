@@ -1,0 +1,16 @@
+#!/bin/bash
+
+#SBATCH -p all
+#SBATCH --gres=gpu:rtx_3090:1
+#SBATCH --mem=16G
+#SBATCH --time=03:00:00
+#SBATCH --job-name=cleanup_6agents_test
+#SBATCH --output=logs/%j.out
+
+source activate SocialJax
+
+export WANDB_API_KEY="PASTE_YOUR_KEY_HERE"
+
+cd /home/rchivag/TMLR_reproducibility
+
+python3 main.py --algorithm ippo_cnn_cleanup --config ippo_cleanup_6agents_test

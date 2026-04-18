@@ -860,6 +860,15 @@ def make_train(config: Dict, pbar: Optional[tqdm] = None):
             if "clean_action_info" in metric:
                 metric["clean_action_info"] = metric["clean_action_info"] * config["ENV_KWARGS"]["num_inner_steps"]
 
+            # Per-agent cleaning and environment diagnostics
+            # clean_action_info: (num_steps, num_actors) -> reshape to (num_steps, num_agents, num_envs)
+            if "clean_action_info" in traj_batch.info:
+                clean_per_agent = traj_batch.info["clean_action_info"].reshape(
+                    config["NUM_STEPS"], num_agents, num_envs
+                ).sum(axis=(0, 2))  # total cleans per agent across steps and envs
+                for i in range(num_agents):
+                    metric[f"agent_{i}_clean_actions"] = clean_per_agent[i]
+
             # Logging callback
             def callback(metric):
                 def to_native(x):
@@ -873,8 +882,12 @@ def make_train(config: Dict, pbar: Optional[tqdm] = None):
                 if pbar is not None:
                     pbar.update(1)
                     ret_val = to_native(metric.get('returned_episode_returns', 0))
+                    dirt_frac = to_native(metric.get('dirt_fraction', 0))
+                    apple_ct = to_native(metric.get('apple_count', 0))
                     pbar.set_postfix({
                         'return': f"{ret_val:.2f}",
+                        'dirt': f"{dirt_frac:.3f}",
+                        'apples': f"{apple_ct:.1f}",
                         'step': int(to_native(metric.get('env_step', 0)))
                     })
 
